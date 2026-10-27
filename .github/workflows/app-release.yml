@@ -15,10 +15,6 @@ concurrency:
   group: app-release
   cancel-in-progress: false
 
-defaults:
-  run:
-    working-directory: app
-
 jobs:
   # The month's releases so far are its app-v<YYYY.MM>.* tags; this one is the next. Its tag is
   # pushed straight away, so the number can't be used twice, and both builds use it.
@@ -59,7 +55,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: expo/expo-github-action@v8
         with:
@@ -81,16 +77,16 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message || 'Manual release' }}
         run: |
           message=$(printf '%s' "$COMMIT_MESSAGE" | head -n 1)
-          eas build --platform android --profile preview --json --wait --message "$message" > ../build.json
+          eas build --platform android --profile preview --json --wait --message "$message" > build.json
 
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          url=$(jq -r '.[0].artifacts.buildUrl' ../build.json)
-          curl -sSL "$url" -o "../robo-defense-${VERSION}.apk"
-          gh release create "app-v${VERSION}" "../robo-defense-${VERSION}.apk" \
+          url=$(jq -r '.[0].artifacts.buildUrl' build.json)
+          curl -sSL "$url" -o "robo-defense-${VERSION}.apk"
+          gh release create "app-v${VERSION}" "robo-defense-${VERSION}.apk" \
             --title "Robo Defense ${VERSION}" \
             --notes "Android app for phones and tablets. Download the APK on the device and open it to install or update. The same version goes to TestFlight for iPhones and iPads."
 
@@ -108,7 +104,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: expo/expo-github-action@v8
         with:
