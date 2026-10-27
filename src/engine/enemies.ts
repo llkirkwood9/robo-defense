@@ -24,6 +24,8 @@ export enum EnemyType {
 export const ENEMY_TYPE_COUNT = 11;
 
 export interface EnemyProps {
+  name: string;
+  /** Short code from the original game. */
   label: string;
   sprite: SpriteId;
   health: number;
@@ -57,6 +59,7 @@ export interface EnemyProps {
 }
 
 interface EnemyDef {
+  name: string;
   label: string;
   sprite: SpriteId;
   health: number;
@@ -76,6 +79,7 @@ interface EnemyDef {
 
 const DEFS: Record<EnemyType, EnemyDef> = {
   [EnemyType.Soldier]: {
+    name: 'Soldier',
     label: 'SLDR',
     sprite: 'soldier',
     health: 7,
@@ -87,6 +91,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.HeavySoldier]: {
+    name: 'Heavy Soldier',
     label: 'HSLD',
     sprite: 'heavy_soldier',
     health: 15,
@@ -98,6 +103,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.Runner]: {
+    name: 'Runner',
     label: 'RUNR',
     sprite: 'runner',
     health: 7,
@@ -109,6 +115,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.Truck]: {
+    name: 'Truck',
     label: 'TRUK',
     sprite: 'truck',
     health: 30,
@@ -120,6 +127,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.LightTank]: {
+    name: 'Light Tank',
     label: 'LTNK',
     sprite: 'light_tank',
     health: 60,
@@ -131,6 +139,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.HeavyTank]: {
+    name: 'Heavy Tank',
     label: 'HTNK',
     sprite: 'heavy_tank',
     health: 150,
@@ -143,6 +152,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.Helicopter]: {
+    name: 'Helicopter',
     label: 'HELI',
     sprite: 'helicopter',
     health: 60,
@@ -155,6 +165,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     shape: [0.5, 0.32, 0.666, 0.4],
   },
   [EnemyType.Jet]: {
+    name: 'Jet',
     label: 'JET',
     sprite: 'jet',
     health: 70,
@@ -167,6 +178,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     shape: [0.48, 0.27, 0.666, 0.5],
   },
   [EnemyType.Bomber]: {
+    name: 'Bomber',
     label: 'BOMB',
     sprite: 'bomber',
     health: 200,
@@ -179,6 +191,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     shape: [0.575, 0.348, 0.625, 0.348],
   },
   [EnemyType.Titan]: {
+    name: 'Titan',
     label: 'TITN',
     sprite: 'titan',
     health: 3000,
@@ -192,6 +205,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 3,
   },
   [EnemyType.Dropper]: {
+    name: 'Mothership',
     label: 'DRPR',
     sprite: 'mothership',
     health: 350,
@@ -214,6 +228,7 @@ function build(def: EnemyDef): EnemyProps {
   const w = sheet.frameWidth;
   const h = sheet.frameHeight;
   return {
+    name: def.name,
     label: def.label,
     sprite: def.sprite,
     health: def.health,

@@ -198,4 +198,14 @@ export class Achievements implements AchievementSink {
   allInfo(): AchievementInfo[] {
     return ACHIEVEMENT_DEFS.map((_, i) => this.info(i));
   }
+
+  /** Developer tool: marks every achievement earned, or clears all progress. */
+  devSetAll(earned: boolean): void {
+    ACHIEVEMENT_DEFS.forEach((def, i) => {
+      this.levels[i] = earned ? def.target : 0;
+    });
+    this.earnedCount = earned ? ACHIEVEMENT_COUNT : 0;
+    this.earnedQueue.length = 0;
+    this.flush();
+  }
 }

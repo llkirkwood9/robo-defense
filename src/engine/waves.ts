@@ -8,7 +8,7 @@
 import { ENEMIES, ENEMY_TYPE_COUNT, enemyBaseHealth, EnemyType } from './enemies';
 import { JavaRandom } from './random';
 
-const NUM_LEVELS = 100;
+export const NUM_LEVELS = 100;
 const HEALTH_ACCEL = 130;
 const HEALTH_SWING_PCT = 10;
 const INTRA_LEVEL_DELAY = 120;
@@ -191,6 +191,16 @@ export class WaveRunner {
   /** True once every group of the current wave has spawned. */
   get waveSpawned(): boolean {
     return (this.data[this.cursor.index] ?? 0) === 0;
+  }
+
+  /** Developer tool: drops the current wave's remaining spawns. */
+  skipSpawns(): void {
+    const c = this.cursor;
+    while ((this.data[c.index] ?? 0) !== 0) {
+      c.index++;
+    }
+    c.subIndex = 0;
+    c.frameIndex = 0;
   }
 
   /** Moves to the next wave. Returns false when the last wave has been completed. */

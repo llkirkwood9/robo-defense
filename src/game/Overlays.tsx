@@ -1,10 +1,11 @@
 /**
  * Full-screen and toast overlays for the game screen: the start card, pause menu, end-of-game
  * score summary (port of `ScoreOverlay`), messages, achievement alerts (port of
- * `AchievementAlert`) and the wave banner.
+ * `AchievementAlert`), the wave banner and the developer cheat panel.
  */
+import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -17,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ACHIEVEMENT_DEFS } from '@/engine/data/achievements';
 import { RunState } from '@/engine/constants';
+import { ENEMIES, ENEMY_TYPE_COUNT } from '@/engine/enemies';
 import type { GameOutcome, ScoreSummary } from '@/engine/gameState';
 import { useStore } from '@/lib/store';
 import { GlassGroup, GlassSurface } from '@/ui/Glass';
@@ -108,11 +110,14 @@ export function PauseMenu({
   onOptions,
   onSaveAndExit,
   onAbandon,
+  onDevTools,
 }: {
   controller: GameController;
   onOptions: () => void;
   onSaveAndExit: () => void;
   onAbandon: () => void;
+  /** Opens the developer panel; the button is hidden when omitted. */
+  onDevTools?: () => void;
 }) {
   const runState = useStore(controller.hud, selectRunState);
   if (runState !== RunState.Paused) {
@@ -136,6 +141,9 @@ export function PauseMenu({
             <GlassButton label="Options" icon="settings" onPress={onOptions} />
             <GlassButton label="Save & Exit" icon="save" onPress={onSaveAndExit} />
             <GlassButton label="Abandon Game" icon="exit" tone="danger" onPress={onAbandon} />
+            {onDevTools && (
+              <GlassButton label="Developer" icon="dev" size="sm" onPress={onDevTools} />
+            )}
           </GlassGroup>
         </GlassSurface>
       </Animated.View>
@@ -163,7 +171,7 @@ const TITLES: Record<GameOutcome, string> = {
 const MESSAGES: Record<GameOutcome, string> = {
   won: 'All 100 waves defeated. The next difficulty level is unlocked.',
   lost: 'The robots broke through.',
-  abandoned: 'Your score has been banked as reward points.',
+  abandoned: 'Your score has been banked as upgrade points.',
 };
 
 export function GameOverCard({
@@ -218,7 +226,7 @@ export function GameOverCard({
                 entering={FadeInDown.delay(250 + rows.length * 220)}
                 style={[styles.summaryRow, styles.totalRow]}
               >
-                <Text variant="label">Reward points earned</Text>
+                <Text variant="label">Upgrade points earned</Text>
                 <Text variant="stat" style={styles.total}>
                   {summary.total.toLocaleString()}
                 </Text>
@@ -342,6 +350,128 @@ export function LevelBanner({ controller }: { controller: GameController }) {
   );
 }
 
+// ---- Developer --------------------------------------------------------------------------------
+
+function DevRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View style={styles.devRow}>
+      <Text variant="caption" style={styles.devLabel}>
+        {label}
+      </Text>
+      <View style={styles.devButtons}>{children}</View>
+    </View>
+  );
+}
+
+/** Cheats for testing, shown in place of the pause menu (development builds only). */
+export function DevPanel({
+  controller,
+  onClose,
+}: {
+  controller: GameController;
+  onClose: () => void;
+}) {
+  const runState = useStore(controller.hud, selectRunState);
+  const paused = runState === RunState.Paused;
+  // Close when the game resumes or ends (e.g. after skipping the last wave).
+  useEffect(() => {
+    if (!paused) onClose();
+  }, [paused, onClose]);
+  if (!paused) {
+    return null;
+  }
+  const cheat = (apply: Parameters<GameController['cheat']>[0]) => () => controller.cheat(apply);
+  return (
+    <Scrim>
+      <Animated.View entering={FadeIn.duration(180)}>
+        <GlassSurface radius={radii.lg} style={[styles.card, styles.devCard]}>
+          <View style={styles.resultHeader}>
+            <Icon name="dev" size={22} color={colors.accent} />
+            <Text variant="title" style={styles.flex}>
+              Developer
+            </Text>
+            <GlassButton icon="close" size="sm" accessibilityLabel="Close" onPress={onClose} />
+          </View>
+          <ScrollView style={styles.devScroll} contentContainerStyle={styles.devList}>
+            <DevRow label="Money">
+              {[100, 1_000, 10_000].map((n) => (
+                <GlassButton
+                  key={n}
+                  label={`+$${n.toLocaleString()}`}
+                  size="sm"
+                  onPress={cheat((s) => s.devAddMoney(n))}
+                />
+              ))}
+            </DevRow>
+            <DevRow label="Health">
+              {[1, 10, 100].map((n) => (
+                <GlassButton
+                  key={n}
+                  label={`+${n}`}
+                  size="sm"
+                  onPress={cheat((s) => s.devAddHealth(n))}
+                />
+              ))}
+              <GlassButton label="−1" size="sm" onPress={cheat((s) => s.devAddHealth(-1))} />
+            </DevRow>
+            <DevRow label="Score">
+              {[1_000, 100_000].map((n) => (
+                <GlassButton
+                  key={n}
+                  label={`+${n.toLocaleString()}`}
+                  size="sm"
+                  onPress={cheat((s) => s.devAddScore(n))}
+                />
+              ))}
+            </DevRow>
+            <DevRow label="Waves">
+              <GlassButton label="Skip wave" size="sm" onPress={cheat((s) => s.devSkipWave())} />
+              <GlassButton
+                label="Skip 10"
+                size="sm"
+                onPress={cheat((s) => {
+                  for (let i = 0; i < 10 && s.isActive; i++) s.devSkipWave();
+                })}
+              />
+              <GlassButton label="Kill all" size="sm" onPress={cheat((s) => s.devKillAll())} />
+            </DevRow>
+            <DevRow label="Spawn">
+              {Array.from({ length: ENEMY_TYPE_COUNT }, (_, type) => (
+                <GlassButton
+                  key={type}
+                  label={ENEMIES[type].name}
+                  size="sm"
+                  onPress={cheat((s) => s.devSpawn(type))}
+                />
+              ))}
+            </DevRow>
+            <DevRow label="End game">
+              <GlassButton
+                label="Win"
+                icon="trophy"
+                size="sm"
+                onPress={cheat((s) => s.devEndGame(true))}
+              />
+              <GlassButton
+                label="Lose"
+                tone="danger"
+                size="sm"
+                onPress={cheat((s) => s.devEndGame(false))}
+              />
+            </DevRow>
+          </ScrollView>
+          <GlassButton
+            label="Resume"
+            icon="play"
+            tone="primary"
+            onPress={() => controller.togglePause()}
+          />
+        </GlassSurface>
+      </Animated.View>
+    </Scrim>
+  );
+}
+
 const styles = StyleSheet.create({
   scrim: {
     position: 'absolute',
@@ -436,6 +566,33 @@ const styles = StyleSheet.create({
     fontSize: 34,
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowRadius: 12,
+  },
+  devCard: {
+    width: 560,
+    maxWidth: '94%',
+    maxHeight: '94%',
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  devScroll: {
+    flexShrink: 1,
+  },
+  devList: {
+    gap: spacing.md,
+  },
+  devRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  devLabel: {
+    width: 64,
+  },
+  devButtons: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   flex: {
     flex: 1,

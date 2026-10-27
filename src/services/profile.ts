@@ -3,10 +3,13 @@
  * the quick save. Loaded synchronously at start-up and shared by every screen.
  */
 import { Achievement, ACHIEVEMENT_COUNT, Achievements } from '@/engine/achievements';
+import { ENEMY_TYPE_COUNT } from '@/engine/enemies';
+import type { EnemyType } from '@/engine/enemies';
 import type { SavedGame, ScoreSummary, SessionConfig } from '@/engine/gameState';
 import { MAP_COUNT, MapType } from '@/engine/maps';
 import type { RewardStore } from '@/engine/rewards';
 import { Rewards } from '@/engine/rewards';
+import { TOWER_TYPE_COUNT, TowerType } from '@/engine/towers';
 import { createStore } from '@/lib/store';
 
 import { Keys, readJSON, remove, writeJSON } from './storage';
@@ -53,6 +56,12 @@ const DEFAULT_NEW_GAME: NewGameSettings = {
   towerMixCode: 0,
 };
 
+/** Field-guide progress: enemy types met in a game and tower types bought. */
+export interface Discovered {
+  enemies: EnemyType[];
+  towers: TowerType[];
+}
+
 /** Reactive summary used by menus. */
 interface ProfileState {
   options: Options;
@@ -61,6 +70,7 @@ interface ProfileState {
   achievementCount: number;
   maxLevelWon: number;
   hasQuickSave: boolean;
+  discovered: Discovered;
   /** Bumped whenever rewards change (forces reward list refreshes). */
   rewardsVersion: number;
 }
@@ -99,6 +109,7 @@ export const profileStore = createStore<ProfileState>({
   achievementCount: achievements.totalCount,
   maxLevelWon: readJSON(Keys.maxLevelWon, 0),
   hasQuickSave: readJSON<SavedGame | null>(Keys.quickSave, null) !== null,
+  discovered: { enemies: [], towers: [], ...readJSON<Partial<Discovered>>(Keys.discovered, {}) },
   rewardsVersion: 0,
 });
 
@@ -149,6 +160,49 @@ export function recordGameOver(summary: ScoreSummary | null, won: boolean, confi
     updateNewGame({ difficulty: config.difficulty + 1 });
   }
   clearQuickSave();
+}
+
+/** Developer tool: sets the highest difficulty won, which controls the difficulty limit. */
+export function devSetMaxLevelWon(level: number): void {
+  const maxLevelWon = Math.max(0, level);
+  writeJSON(Keys.maxLevelWon, maxLevelWon);
+  profileStore.set({ maxLevelWon });
+}
+
+// ---- Field guide -------------------------------------------------------------------------------
+
+function setDiscovered(discovered: Discovered): void {
+  writeJSON(Keys.discovered, discovered);
+  profileStore.set({ discovered });
+}
+
+/** Records that an enemy type has appeared in a game, unlocking it in the field guide. */
+export function markEnemySeen(type: EnemyType): void {
+  const { discovered } = profileStore.get();
+  if (!discovered.enemies.includes(type)) {
+    setDiscovered({ ...discovered, enemies: [...discovered.enemies, type] });
+  }
+}
+
+/** Records that a tower type has been built or upgraded to, unlocking it in the tower guide. */
+export function markTowerBought(type: TowerType): void {
+  const { discovered } = profileStore.get();
+  if (!discovered.towers.includes(type)) {
+    setDiscovered({ ...discovered, towers: [...discovered.towers, type] });
+  }
+}
+
+/** Developer tool: unlocks every guide entry, or locks them all again. */
+export function devSetAllDiscovered(unlocked: boolean): void {
+  const all = (count: number) => Array.from({ length: count }, (_, i) => i);
+  setDiscovered(
+    unlocked
+      ? {
+          enemies: all(ENEMY_TYPE_COUNT),
+          towers: all(TOWER_TYPE_COUNT).filter((t) => t !== TowerType.Sell),
+        }
+      : { enemies: [], towers: [] },
+  );
 }
 
 // ---- Quick save --------------------------------------------------------------------------------

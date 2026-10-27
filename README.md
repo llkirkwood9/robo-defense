@@ -1,8 +1,6 @@
 # Robo Defense (Expo)
 
 A React Native port of the Android tower defense game **Robo Defense**, built with Expo SDK 58.
-It reuses the original artwork and sound effects and reimplements the original game rules from
-the decompiled source in `../original`, with a modern, Liquid Glass-styled interface.
 
 - Full port: all 7 maps (including procedurally generated VR Training maps), 23 tower types,
   11 enemy types, 100 waves, upgrades, reward shop, 88 achievements, survival mode, Tower Mix mode
@@ -70,12 +68,6 @@ records the world into a Skia picture (`WorldRenderer`, a port of the original `
 picture is handed to the canvas through a Reanimated shared value, so React never re-renders for
 world updates. HUD and menus are regular React Native views that subscribe to small stores
 (`src/lib/store.ts`) and only re-render when the value they read changes.
-
-**Liquid Glass.** `GlassSurface` uses `expo-glass-effect` (native `UIGlassEffect`) on iOS 26+,
-falls back to a system blur on older iOS and to translucent panels on Android or when Reduce
-Transparency is on. Menu screens use the native stack header (a Liquid Glass bar on iOS 26), and
-settings use native `Switch`, `Slider` and segmented controls, which adopt the system look.
-Icons are SF Symbols on iOS and Material Symbols on Android via `expo-symbols`.
 
 ## Differences from the original
 

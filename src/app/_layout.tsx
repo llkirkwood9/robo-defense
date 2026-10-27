@@ -67,8 +67,10 @@ export default function RootLayout() {
             name="game"
             options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }}
           />
-          <Stack.Screen name="rewards" options={{ title: 'Rewards' }} />
+          <Stack.Screen name="upgrades" options={{ title: 'Upgrades' }} />
           <Stack.Screen name="achievements" options={{ title: 'Achievements' }} />
+          <Stack.Screen name="guide" options={{ title: 'Guide' }} />
+          <Stack.Screen name="dev" options={{ title: 'Developer' }} />
           <Stack.Screen name="options" options={{ title: 'Options' }} />
           <Stack.Screen name="credits" options={{ title: 'Credits' }} />
         </Stack>

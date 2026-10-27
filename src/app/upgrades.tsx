@@ -1,5 +1,5 @@
 /**
- * Reward shop (port of `RewardActivity`): spend reward points on permanent upgrades.
+ * Upgrade shop (port of `RewardActivity`): spend upgrade points on permanent upgrades.
  */
 import { StyleSheet, View } from 'react-native';
 
@@ -67,7 +67,7 @@ function RewardCard({ info }: { info: RewardInfo }) {
   );
 }
 
-export default function RewardsScreen() {
+export default function UpgradesScreen() {
   const points = useStore(profileStore, selectPoints);
   useStore(profileStore, selectVersion);
   const all = rewards.allInfo();
@@ -77,7 +77,7 @@ export default function RewardsScreen() {
       <GlassSurface radius={radii.lg} style={styles.balance}>
         <Icon name="rewards" size={26} color={colors.gold} />
         <View style={styles.flex}>
-          <Text variant="caption">REWARD POINTS</Text>
+          <Text variant="caption">UPGRADE POINTS</Text>
           <Text variant="title" color={colors.gold}>
             {points.toLocaleString()}
           </Text>

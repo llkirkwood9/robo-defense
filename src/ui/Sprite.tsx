@@ -11,17 +11,22 @@ import { SPRITES } from '@/engine/data/sprites';
 import type { TowerProps } from '@/engine/towers';
 import { SPRITE_SOURCES } from '@/render/assets';
 
-/** One frame of a sprite sheet, scaled so the frame is `width` points wide. */
+/**
+ * One frame of a sprite sheet, scaled so the frame is `width` points wide. `tintColor` paints every
+ * opaque pixel in one color (used for locked silhouettes).
+ */
 export function SpriteFrame({
   sprite,
   frame = 0,
   width,
   style,
+  tintColor,
 }: {
   sprite: SpriteId;
   frame?: number;
   width: number;
   style?: StyleProp<ViewStyle>;
+  tintColor?: string;
 }) {
   const sheet = SPRITES[sprite];
   const scale = width / sheet.frameWidth;
@@ -40,13 +45,22 @@ export function SpriteFrame({
           transform: [{ translateX: -frame * sheet.frameWidth * scale }],
         }}
         contentFit="fill"
+        tintColor={tintColor}
       />
     </View>
   );
 }
 
 /** A tower icon: base plus turret facing down, as on the original build buttons. */
-export function TowerIcon({ props, size }: { props: TowerProps; size: number }) {
+export function TowerIcon({
+  props,
+  size,
+  tintColor,
+}: {
+  props: TowerProps;
+  size: number;
+  tintColor?: string;
+}) {
   if (!props.sprite) {
     return <View style={{ width: size, height: size }} />;
   }
@@ -65,9 +79,16 @@ export function TowerIcon({ props, size }: { props: TowerProps; size: number }) 
         frame={0}
         width={size}
         style={{ marginTop: turretOffset }}
+        tintColor={tintColor}
       />
       {turretFrame >= 0 && (
-        <SpriteFrame sprite={props.sprite} frame={turretFrame} width={size} style={styles.turret} />
+        <SpriteFrame
+          sprite={props.sprite}
+          frame={turretFrame}
+          width={size}
+          style={styles.turret}
+          tintColor={tintColor}
+        />
       )}
     </View>
   );

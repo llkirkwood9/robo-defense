@@ -38,6 +38,12 @@ const ICONS = {
   credits: { ios: 'person.2.fill', android: 'group' },
   restart: { ios: 'arrow.counterclockwise', android: 'refresh' },
   flag: { ios: 'flag.checkered', android: 'flag' },
+  enemies: { ios: 'cpu.fill', android: 'smart_toy' },
+  plane: { ios: 'airplane', android: 'flight' },
+  speed: { ios: 'hare.fill', android: 'speed' },
+  dev: { ios: 'hammer.fill', android: 'build' },
+  range: { ios: 'scope', android: 'gps_fixed' },
+  timer: { ios: 'timer', android: 'timer' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

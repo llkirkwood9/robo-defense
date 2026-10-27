@@ -24,8 +24,10 @@ export default function CreditsScreen() {
       <GlassSurface radius={radii.lg} style={styles.card}>
         <Text variant="title">Robo Defense</Text>
         <Text variant="body" color={colors.textDim}>
-          A React Native port of the classic Android tower defense game, rebuilt with Expo using the
-          original artwork, sound effects and game rules.
+          Original game - Lupis Labs Software
+        </Text>
+        <Text variant="body" color={colors.textDim}>
+          Port - Logan Kirkwood
         </Text>
       </GlassSurface>
       <GlassSurface radius={radii.lg} style={styles.card}>

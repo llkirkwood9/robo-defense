@@ -4,7 +4,7 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,6 +13,7 @@ import { useStore } from '@/lib/store';
 import { TITLE_SOURCES } from '@/render/assets';
 import { clearQuickSave, profileStore, takeSurvivorAnnouncement } from '@/services/profile';
 import { Backdrop } from '@/ui/Backdrop';
+import { confirm, notify } from '@/ui/dialog';
 import { GlassGroup, GlassSurface } from '@/ui/Glass';
 import { GlassButton } from '@/ui/GlassButton';
 import { Icon } from '@/ui/Icon';
@@ -46,7 +47,7 @@ export default function TitleScreen() {
 
   useEffect(() => {
     if (takeSurvivorAnnouncement()) {
-      Alert.alert(
+      notify(
         'Congratulations, Survivor!',
         'You beat survival mode and unlocked Tower Mix mode. When you start a new game you can now rebalance the towers for more strategic variety. Have fun!',
       );
@@ -58,17 +59,18 @@ export default function TitleScreen() {
       router.push('/new-game');
       return;
     }
-    Alert.alert('Discard saved game?', 'Starting a new game will replace your saved game.', [
-      { text: 'Cancel', style: 'cancel' },
+    confirm(
       {
-        text: 'New Game',
-        style: 'destructive',
-        onPress: () => {
-          clearQuickSave();
-          router.push('/new-game');
-        },
+        title: 'Discard saved game?',
+        message: 'Starting a new game will replace your saved game.',
+        confirmLabel: 'New Game',
+        destructive: true,
       },
-    ]);
+      () => {
+        clearQuickSave();
+        router.push('/new-game');
+      },
+    );
   };
 
   return (
@@ -93,7 +95,7 @@ export default function TitleScreen() {
             <GlassSurface radius={radii.pill} style={styles.chip}>
               <Icon name="rewards" size={16} color={colors.gold} />
               <Text variant="stat">{points.toLocaleString()}</Text>
-              <Text variant="caption">reward pts</Text>
+              <Text variant="caption">upgrade pts</Text>
             </GlassSurface>
             <GlassSurface radius={radii.pill} style={styles.chip}>
               <Icon name="trophy" size={16} color={colors.accent} />
@@ -128,26 +130,43 @@ export default function TitleScreen() {
                 size="lg"
                 onPress={newGame}
               />
-              <GlassButton label="Rewards" icon="rewards" onPress={() => router.push('/rewards')} />
-              <GlassButton
-                label="Achievements"
-                icon="trophy"
-                onPress={() => router.push('/achievements')}
-              />
               <View style={styles.row}>
+                <GlassButton
+                  label="Upgrades"
+                  icon="rewards"
+                  style={styles.flex}
+                  onPress={() => router.push('/upgrades')}
+                />
+                <GlassButton
+                  label="Achievements"
+                  icon="trophy"
+                  style={styles.flex}
+                  onPress={() => router.push('/achievements')}
+                />
+              </View>
+              <View style={styles.row}>
+                <GlassButton
+                  label="Guide"
+                  icon="enemies"
+                  style={styles.flex}
+                  onPress={() => router.push('/guide')}
+                />
                 <GlassButton
                   label="Options"
                   icon="settings"
                   style={styles.flex}
                   onPress={() => router.push('/options')}
                 />
-                <GlassButton
-                  label="Credits"
-                  icon="credits"
-                  style={styles.flex}
-                  onPress={() => router.push('/credits')}
-                />
               </View>
+              <GlassButton label="Credits" icon="credits" onPress={() => router.push('/credits')} />
+              {__DEV__ && (
+                <GlassButton
+                  label="Developer"
+                  icon="dev"
+                  size="sm"
+                  onPress={() => router.push('/dev')}
+                />
+              )}
             </GlassGroup>
           </ScrollView>
         </Animated.View>

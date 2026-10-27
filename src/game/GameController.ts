@@ -33,6 +33,8 @@ import { soundBoard } from '@/services/audio';
 import { haptics } from '@/services/haptics';
 import {
   achievements,
+  markEnemySeen,
+  markTowerBought,
   profileStore,
   readZoom,
   recordGameOver,
@@ -263,6 +265,12 @@ export class GameController {
       case 'towerPlaced':
         haptics.impact();
         break;
+      case 'towerBought':
+        markTowerBought(event.tower);
+        break;
+      case 'enemySpawned':
+        markEnemySeen(event.enemy);
+        break;
       case 'towersChanged':
         this.hud.set((h) => ({ towerVersion: h.towerVersion + 1 }));
         this.dirty = true;
@@ -360,6 +368,13 @@ export class GameController {
   abandon(): void {
     this.state.abandon();
     this.syncHud();
+  }
+
+  /** Applies a developer cheat to the session (see the `dev*` methods on `GameState`). */
+  cheat(apply: (state: GameState) => void): void {
+    apply(this.state);
+    this.syncHud();
+    this.dirty = true;
   }
 
   // ---- Camera gestures ------------------------------------------------------------------------

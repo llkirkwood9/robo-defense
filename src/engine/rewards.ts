@@ -133,7 +133,7 @@ const REWARD_DEFS: readonly RewardDef[] = [
   ),
   levelled(
     'Health Reward',
-    'Health Reward',
+    'Health Upgrade',
     'Increase base health by %d',
     10000,
     Increase.PowerUp,
@@ -141,7 +141,7 @@ const REWARD_DEFS: readonly RewardDef[] = [
   ),
   levelled(
     'Starting Cash Reward',
-    'Starting Cash Reward',
+    'Starting Cash Upgrade',
     'Increase starting cash by %d',
     25000,
     Increase.PowerUp,
@@ -338,6 +338,12 @@ export class Rewards implements RewardLevels {
 
   addPoints(points: number): void {
     this.pointsBalance += points;
+    this.save();
+  }
+
+  /** Developer tool: removes every purchased reward level (points are not refunded). */
+  devResetLevels(): void {
+    this.levels.fill(0);
     this.save();
   }
 

@@ -8,4 +8,5 @@ export const Keys = {
   quickSave: 'quickSave',
   zoom: 'zoom',
   survivorShown: 'survivorShown',
+  discovered: 'discovered',
 } as const;

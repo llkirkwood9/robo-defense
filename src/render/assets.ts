@@ -3,7 +3,7 @@
  *
  * Metro needs static `require` calls, so every asset is listed explicitly.
  */
-import type { LevelImageId, SpriteId } from '@/engine/data/sprites';
+import type { LevelImageId, SpriteId } from "@/engine/data/sprites";
 
 /* prettier-ignore */
 export const SPRITE_SOURCES: Record<SpriteId, number> = {
@@ -70,29 +70,29 @@ export const SPRITE_SOURCES: Record<SpriteId, number> = {
 };
 
 export const LEVEL_SOURCES: Record<LevelImageId, number> = {
-  basic_level: require('@/assets/levels/basic_level.jpg'),
-  courtyard_level: require('@/assets/levels/courtyard_level.jpg'),
-  cross_level: require('@/assets/levels/cross_level.jpg'),
-  mixer_level: require('@/assets/levels/mixer_level.jpg'),
-  roadway_level: require('@/assets/levels/roadway_level.jpg'),
-  skytower_level: require('@/assets/levels/skytower_level.jpg'),
-  threeway_level: require('@/assets/levels/threeway_level.jpg'),
+  basic_level: require("@/assets/levels/basic_level.jpg"),
+  courtyard_level: require("@/assets/levels/courtyard_level.jpg"),
+  cross_level: require("@/assets/levels/cross_level.jpg"),
+  mixer_level: require("@/assets/levels/mixer_level.jpg"),
+  roadway_level: require("@/assets/levels/roadway_level.jpg"),
+  skytower_level: require("@/assets/levels/skytower_level.jpg"),
+  threeway_level: require("@/assets/levels/threeway_level.jpg"),
 };
 
 /** Robot portraits from the original title screen. */
 export const TITLE_SOURCES: number[] = [
-  require('@/assets/title/title1.jpg'),
-  require('@/assets/title/title2.jpg'),
-  require('@/assets/title/title3.jpg'),
-  require('@/assets/title/title4.jpg'),
-  require('@/assets/title/title5.jpg'),
-  require('@/assets/title/title6.jpg'),
-  require('@/assets/title/title7.jpg'),
-  require('@/assets/title/title8.jpg'),
-  require('@/assets/title/title9.jpg'),
+  require("@/assets/title/title1_nobg.png"),
+  require("@/assets/title/title2_nobg.png"),
+  require("@/assets/title/title3_nobg.png"),
+  require("@/assets/title/title4_nobg.png"),
+  require("@/assets/title/title5_nobg.png"),
+  require("@/assets/title/title6_nobg.png"),
+  require("@/assets/title/title7_nobg.png"),
+  require("@/assets/title/title8_nobg.png"),
+  require("@/assets/title/title9_nobg.png"),
 ];
 
 export const UI_SOURCES = {
-  heart: require('@/assets/ui/heart.png'),
-  icon: require('@/assets/ui/icon.png'),
+  heart: require("@/assets/ui/heart.png"),
+  icon: require("@/assets/ui/icon.png"),
 };

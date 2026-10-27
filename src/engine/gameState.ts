@@ -65,6 +65,10 @@ export type GameEvent =
   | { type: 'scoreAdded'; amount: number }
   | { type: 'achievement'; index: Achievement }
   | { type: 'towerPlaced' }
+  /** A tower of this type was built or upgraded to. */
+  | { type: 'towerBought'; tower: TowerType }
+  /** An enemy of this type entered the map. */
+  | { type: 'enemySpawned'; enemy: EnemyType }
   | { type: 'towersChanged' }
   | { type: 'levelStarted'; level: number }
   | { type: 'autosave' }
@@ -307,6 +311,51 @@ export class GameState implements World {
     this.endGame(RunState.NotStarted);
   }
 
+  // ---- Developer tools ----------------------------------------------------------------------
+  // Cheats for testing. Money and health change directly, bypassing achievement tracking.
+
+  devAddMoney(amount: number): void {
+    this.money = Math.max(0, this.money + amount);
+  }
+
+  devAddHealth(amount: number): void {
+    this.health = Math.max(1, this.health + amount);
+  }
+
+  devAddScore(amount: number): void {
+    this.score = Math.max(0, this.score + amount);
+  }
+
+  /** Destroys every enemy on the map on the next tick; kills are rewarded as usual. */
+  devKillAll(): void {
+    for (const e of this.enemies) {
+      e.health = 0;
+    }
+  }
+
+  /** Spawns one enemy at each path's entrance. */
+  devSpawn(type: EnemyType): void {
+    if (!this.isActive) {
+      return;
+    }
+    this.layout.paths.forEach((p, i) => this.dropUnit(type, p.startX, p.startY, p.startDir, i));
+  }
+
+  /** Ends the current wave without rewards and starts the next one (or wins after the last). */
+  devSkipWave(): void {
+    if (!this.isActive) {
+      return;
+    }
+    this.waves.skipSpawns();
+    this.enemies = [];
+    this.bullets = [];
+    this.nextLevel();
+  }
+
+  devEndGame(won: boolean): void {
+    this.endGame(won ? RunState.Won : RunState.Lost);
+  }
+
   /** Advances the simulation by one tick. */
   update(): void {
     this.dequeueAchievements();
@@ -358,6 +407,7 @@ export class GameState implements World {
     if (type === TowerType.Slow1) this.flags.noSlowTowers = false;
     if (type === TowerType.Rocket1) this.flags.noRocketTowers = false;
     this.services.emit({ type: 'towerPlaced' });
+    this.services.emit({ type: 'towerBought', tower: type });
     return true;
   }
 
@@ -384,6 +434,7 @@ export class GameState implements World {
       this.towerChanged();
     }
     this.flags.cheapskate = false;
+    this.services.emit({ type: 'towerBought', tower: newType });
   }
 
   private sellTower(tower: Tower): void {
@@ -497,6 +548,7 @@ export class GameState implements World {
   private spawnEnemy(type: EnemyType, x: number, y: number, dir: Dir, path: number): void {
     const health = enemyBaseHealth(type, this.levelNum, this.difficulty);
     this.enemies.unshift(Enemy.spawn(x, y, dir, type, this.tick, health, path));
+    this.services.emit({ type: 'enemySpawned', enemy: type });
   }
 
   private enemyDefeated(e: Enemy): void {

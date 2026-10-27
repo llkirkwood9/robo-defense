@@ -11,15 +11,21 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": true,
-      "bundleIdentifier": "com.example.robodefense"
+      "bundleIdentifier": "me.llkirkwood.robodefense"
     },
     "android": {
-      "package": "com.example.robodefense",
+      "package": "me.llkirkwood.robodefense",
       "adaptiveIcon": {
         "backgroundColor": "#05070D",
         "foregroundImage": "./assets/ui/icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "output": "single",
@@ -41,6 +47,17 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "40589dd7-144d-46f3-892e-ef580518e5b2"
+      }
+    },
+    "owner": "llkirkwood119"
   }
 }

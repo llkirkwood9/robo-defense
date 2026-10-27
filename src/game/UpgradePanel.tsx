@@ -23,8 +23,8 @@ const selectVersion = (h: HudState) => h.towerVersion;
 const selectMoney = (h: HudState) => h.money;
 
 /**
- * Tower stats as two short lines (power and fire rate, then range), so neither gets cut off in
- * the narrow upgrade cards.
+ * Tower stats as two short lines (power and fire rate, then range). Lines wrap rather than
+ * truncate in the narrow upgrade cards.
  */
 function describe(p: TowerProps): string[] {
   const attack: string[] = [];
@@ -41,7 +41,7 @@ function describe(p: TowerProps): string[] {
 
 function StatLines({ props }: { props: TowerProps }) {
   return describe(props).map((line) => (
-    <Text key={line} variant="caption" numberOfLines={1}>
+    <Text key={line} variant="caption">
       {line}
     </Text>
   ));
@@ -80,11 +80,7 @@ function UpgradeOption({
           <TowerIcon props={props} size={44} />
         </View>
         <View style={styles.optionText}>
-          <Text
-            variant="label"
-            numberOfLines={1}
-            color={affordable ? colors.text : colors.textFaint}
-          >
+          <Text variant="label" color={affordable ? colors.text : colors.textFaint}>
             {props.label}
           </Text>
           <Text
@@ -96,7 +92,7 @@ function UpgradeOption({
           </Text>
           <StatLines props={props} />
           {notes.length > 0 && (
-            <Text variant="caption" numberOfLines={1} color={colors.accent}>
+            <Text variant="caption" color={colors.accent}>
               {notes.join(' · ')}
             </Text>
           )}
@@ -136,7 +132,7 @@ export function UpgradePanel({ controller }: { controller: GameController }) {
           <View style={styles.header}>
             <TowerIcon props={props} size={48} />
             <View style={styles.flex}>
-              <Text variant="title" numberOfLines={1}>
+              <Text variant="title" style={styles.title}>
                 {props.label}
               </Text>
               <StatLines props={props} />
@@ -217,6 +213,9 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flex: 1,
+  },
+  title: {
+    fontSize: 18,
   },
   cost: {
     fontSize: 13,

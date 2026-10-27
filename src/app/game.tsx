@@ -5,21 +5,14 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  AppState,
-  BackHandler,
-  Platform,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 
 import { GameCanvas } from '@/game/GameCanvas';
 import { GameController } from '@/game/GameController';
 import { Hud } from '@/game/Hud';
 import {
   AchievementToast,
+  DevPanel,
   GameOverCard,
   LevelBanner,
   MessageToasts,
@@ -36,6 +29,7 @@ import {
   profileStore,
   sessionConfigFromSettings,
 } from '@/services/profile';
+import { confirm } from '@/ui/dialog';
 import { Text } from '@/ui/Text';
 import { colors } from '@/ui/theme';
 
@@ -70,6 +64,8 @@ export default function GameScreen() {
   const [controller] = useState(() => createController(resume === '1'));
   const { images, error } = useGameImages(controller.state.layout.image);
   const keepAwake = useStore(profileStore, selectKeepAwake);
+  const [devOpen, setDevOpen] = useState(false);
+  const closeDev = useCallback(() => setDevOpen(false), []);
 
   // Pause and save whenever the app goes to the background (the original saved in onStop).
   useEffect(() => {
@@ -116,20 +112,17 @@ export default function GameScreen() {
   };
 
   const abandon = () => {
-    Alert.alert(
-      'Abandon this game?',
-      'Your score so far is banked as reward points, but the game ends.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Abandon',
-          style: 'destructive',
-          onPress: () => {
-            controller.abandon();
-            clearQuickSave();
-          },
-        },
-      ],
+    confirm(
+      {
+        title: 'Abandon this game?',
+        message: 'Your score so far is banked as upgrade points, but the game ends.',
+        confirmLabel: 'Abandon',
+        destructive: true,
+      },
+      () => {
+        controller.abandon();
+        clearQuickSave();
+      },
     );
   };
 
@@ -160,12 +153,17 @@ export default function GameScreen() {
       <AchievementToast controller={controller} />
       <UpgradePanel controller={controller} />
       <StartCard controller={controller} />
-      <PauseMenu
-        controller={controller}
-        onOptions={() => router.push('/options')}
-        onSaveAndExit={saveAndExit}
-        onAbandon={abandon}
-      />
+      {devOpen ? (
+        <DevPanel controller={controller} onClose={closeDev} />
+      ) : (
+        <PauseMenu
+          controller={controller}
+          onOptions={() => router.push('/options')}
+          onSaveAndExit={saveAndExit}
+          onAbandon={abandon}
+          onDevTools={__DEV__ ? () => setDevOpen(true) : undefined}
+        />
+      )}
       <GameOverCard controller={controller} onMenu={exitToMenu} />
     </View>
   );
