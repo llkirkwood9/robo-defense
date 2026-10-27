@@ -4,6 +4,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { StyleSheet, View } from 'react-native';
 
+import { APP_VERSION } from '@/services/version';
 import { GlassSurface } from '@/ui/Glass';
 import { GlassButton } from '@/ui/GlassButton';
 import { Screen } from '@/ui/Screen';
@@ -22,7 +23,7 @@ export default function CreditsScreen() {
   return (
     <Screen backdrop="cross_level" contentStyle={styles.content}>
       <GlassSurface radius={radii.lg} style={styles.card}>
-        <Text variant="title">Robo Defense</Text>
+        <Text variant="title">Robo Defense - {APP_VERSION}</Text>
         <Text variant="body" color={colors.textDim}>
           Original game - Lupis Labs Software
         </Text>

@@ -1,0 +1,137 @@
+# Builds the mobile app on EAS (Expo's build service) whenever the app-release branch is pushed:
+# an Android APK attached to a new GitHub release, and an iOS build sent on to TestFlight. Can also
+# be started by hand from the Actions tab. Each release is versioned YYYY.MM.<build>, numbered
+# from 1 each month and tagged app-v<version>. Needs the EXPO_TOKEN and API_URL (the live site the
+# app talks to).
+name: App release
+
+on:
+  push:
+    branches: [app-release]
+  workflow_dispatch:
+
+# One release at a time; a newer push waits for the one running.
+concurrency:
+  group: app-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  # The month's releases so far are its app-v<YYYY.MM>.* tags; this one is the next. Its tag is
+  # pushed straight away, so the number can't be used twice, and both builds use it.
+  version:
+    name: Number the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Number and tag this release
+        id: version
+        run: |
+          month=$(date -u +%Y.%m)
+          last=$(git tag --list "app-v${month}.*" | sed "s/^app-v${month}\.//" | sort -n | tail -1)
+          version="${month}.$(( ${last:-0} + 1 ))"
+          git tag "app-v${version}"
+          git push origin "app-v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  android:
+    name: Android release
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      # app.config.js reads the version from version.json
+      - name: Set the version and server
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          echo "{ \"version\": \"$VERSION\" }" > version.json
+
+      # The build runs on EAS; this waits for it and keeps the details of the finished build.
+      - name: Build the APK
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || 'Manual release' }}
+        run: |
+          message=$(printf '%s' "$COMMIT_MESSAGE" | head -n 1)
+          eas build --platform android --profile preview --json --wait --message "$message" > ../build.json
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          url=$(jq -r '.[0].artifacts.buildUrl' ../build.json)
+          curl -sSL "$url" -o "../robo-defense-${VERSION}.apk"
+          gh release create "app-v${VERSION}" "../robo-defense-${VERSION}.apk" \
+            --title "Robo Defense ${VERSION}" \
+            --notes "Android app for phones and tablets. Download the APK on the device and open it to install or update. The same version goes to TestFlight for iPhones and iPads."
+
+  ios:
+    name: iOS to TestFlight
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      # app.config.js reads the version from version.json
+      - name: Set the version and server
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          echo "{ \"version\": \"$VERSION\" }" > version.json
+
+      # Built on EAS's Macs and submitted to App Store Connect when it finishes; TestFlight
+      # testers get it once Apple has processed it. The Apple Team ID lets EAS sign in with the
+      # App Store Connect API key without asking for it (it isn't a secret). There's no "What to
+      # Test" note: EAS only sends one on its Enterprise plan.
+      - name: Build and submit to TestFlight
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || 'Manual release' }}
+          EXPO_APPLE_TEAM_ID: UM4FVJ7P7Y
+        run: |
+          message=$(printf '%s' "$COMMIT_MESSAGE" | head -n 1)
+          eas build --platform ios --profile production --non-interactive --wait --auto-submit --message "$message"
