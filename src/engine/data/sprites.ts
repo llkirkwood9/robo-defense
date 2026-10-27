@@ -1,0 +1,106 @@
+/**
+ * Sprite sheet catalogue.
+ *
+ * Every sheet is a single horizontal strip of equally sized frames. The engine only needs frame
+ * counts and sizes (for directions, animation and hit offsets); the render layer maps each id to
+ * the bundled image file (see `src/render/spriteAssets.ts`).
+ */
+
+export interface SpriteSheet {
+  frameWidth: number;
+  frameHeight: number;
+  frames: number;
+}
+
+const strip = (frameWidth: number, frameHeight: number, frames: number): SpriteSheet => ({
+  frameWidth,
+  frameHeight,
+  frames,
+});
+
+/** Square frames whose size equals the sheet height (the original's default slicing). */
+const squares = (size: number, frames: number) => strip(size, size, frames);
+
+export const SPRITES = {
+  // Towers: frame 0 is the base, the remaining frames are turret directions or animation.
+  aa_tower: squares(70, 33),
+  aa_tower2: squares(70, 33),
+  artillery: squares(70, 2),
+  flame_tower: squares(70, 33),
+  flame_tower2: squares(70, 33),
+  flare: squares(70, 1),
+  gun_tower: squares(70, 33),
+  gun_tower2: squares(70, 33),
+  gun_tower3: squares(70, 33),
+  ice_tower: squares(70, 9),
+  ice_tower2: squares(70, 9),
+  ice_tower3: squares(70, 9),
+  mine_armed: squares(70, 7),
+  mine_unarmed: squares(70, 1),
+  mortar: squares(70, 2),
+  rocket_tower: squares(70, 33),
+  rocket_tower2: squares(70, 33),
+  rocket_tower3: squares(70, 33),
+  sam_tower: squares(70, 33),
+  sam_tower2: squares(70, 33),
+  teleport_tower_armed: squares(70, 17),
+  teleport_tower_unarmed: squares(70, 1),
+
+  // Enemies: four equal groups of frames, ordered right, up, left, down.
+  soldier: squares(70, 48),
+  heavy_soldier: squares(70, 64),
+  runner: squares(70, 48),
+  truck: squares(70, 12),
+  light_tank: squares(70, 12),
+  heavy_tank: squares(70, 40),
+  helicopter: strip(105, 175, 24),
+  jet: strip(105, 175, 4),
+  bomber: strip(105, 175, 4),
+  titan: strip(70, 140, 40),
+  mothership: strip(105, 151, 4),
+
+  // Projectiles: one frame, or 32 directional frames.
+  bullet_small: squares(35, 1),
+  bullet_large: squares(70, 1),
+  uranium_bullet: squares(70, 1),
+  shell_small: squares(35, 1),
+  shell_large: squares(70, 1),
+  rocket: squares(39, 32),
+  missile: squares(70, 32),
+
+  // Effects.
+  explosion: squares(70, 20),
+  teleport_explosion: squares(70, 26),
+  fire: squares(35, 25),
+
+  // Map decorations.
+  courtyard_ne_overlay: strip(32, 63, 1),
+  courtyard_nw_overlay: strip(32, 63, 1),
+  courtyard_se_overlay: strip(45, 65, 1),
+  courtyard_sw_overlay: strip(45, 65, 1),
+  mixer_1x1: squares(70, 1),
+  mixer_1x2: strip(70, 140, 1),
+  mixer_2x1: strip(140, 70, 1),
+  mixer_2x2: squares(140, 1),
+  mixer_entrance_e: squares(70, 1),
+  mixer_entrance_n: squares(70, 1),
+  mixer_entrance_s: squares(70, 1),
+  mixer_entrance_w: squares(70, 1),
+  mixer_exit_e: squares(70, 1),
+  mixer_exit_n: squares(70, 1),
+  mixer_exit_s: squares(70, 1),
+  mixer_exit_w: squares(70, 1),
+  mixer_path: squares(70, 1),
+} as const satisfies Record<string, SpriteSheet>;
+
+export type SpriteId = keyof typeof SPRITES;
+
+/** Full-size map backgrounds. */
+export type LevelImageId =
+  | 'basic_level'
+  | 'courtyard_level'
+  | 'cross_level'
+  | 'mixer_level'
+  | 'roadway_level'
+  | 'skytower_level'
+  | 'threeway_level';

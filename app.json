@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Robo Defense",
+    "slug": "robodefense",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/ui/icon.png",
+    "scheme": "robodefense",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#05070D",
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.example.robodefense"
+    },
+    "android": {
+      "package": "com.example.robodefense",
+      "adaptiveIcon": {
+        "backgroundColor": "#05070D",
+        "foregroundImage": "./assets/ui/icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/ui/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#05070D",
+          "image": "./assets/ui/icon.png",
+          "imageWidth": 96
+        }
+      ],
+      "expo-audio",
+      "expo-sqlite",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

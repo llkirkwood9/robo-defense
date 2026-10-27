@@ -1,0 +1,98 @@
+/**
+ * Maps sprite and level ids to bundled image files.
+ *
+ * Metro needs static `require` calls, so every asset is listed explicitly.
+ */
+import type { LevelImageId, SpriteId } from '@/engine/data/sprites';
+
+/* prettier-ignore */
+export const SPRITE_SOURCES: Record<SpriteId, number> = {
+  aa_tower: require('@/assets/sprites/aa_tower.png'),
+  aa_tower2: require('@/assets/sprites/aa_tower2.png'),
+  artillery: require('@/assets/sprites/artillery.png'),
+  bomber: require('@/assets/sprites/bomber.png'),
+  bullet_large: require('@/assets/sprites/bullet_large.png'),
+  bullet_small: require('@/assets/sprites/bullet_small.png'),
+  courtyard_ne_overlay: require('@/assets/sprites/courtyard_ne_overlay.png'),
+  courtyard_nw_overlay: require('@/assets/sprites/courtyard_nw_overlay.png'),
+  courtyard_se_overlay: require('@/assets/sprites/courtyard_se_overlay.png'),
+  courtyard_sw_overlay: require('@/assets/sprites/courtyard_sw_overlay.png'),
+  explosion: require('@/assets/sprites/explosion.png'),
+  fire: require('@/assets/sprites/fire.png'),
+  flame_tower: require('@/assets/sprites/flame_tower.png'),
+  flame_tower2: require('@/assets/sprites/flame_tower2.png'),
+  flare: require('@/assets/sprites/flare.png'),
+  gun_tower: require('@/assets/sprites/gun_tower.png'),
+  gun_tower2: require('@/assets/sprites/gun_tower2.png'),
+  gun_tower3: require('@/assets/sprites/gun_tower3.png'),
+  heavy_soldier: require('@/assets/sprites/heavy_soldier.png'),
+  heavy_tank: require('@/assets/sprites/heavy_tank.png'),
+  helicopter: require('@/assets/sprites/helicopter.png'),
+  ice_tower: require('@/assets/sprites/ice_tower.png'),
+  ice_tower2: require('@/assets/sprites/ice_tower2.png'),
+  ice_tower3: require('@/assets/sprites/ice_tower3.png'),
+  jet: require('@/assets/sprites/jet.png'),
+  light_tank: require('@/assets/sprites/light_tank.png'),
+  mine_armed: require('@/assets/sprites/mine_armed.png'),
+  mine_unarmed: require('@/assets/sprites/mine_unarmed.png'),
+  missile: require('@/assets/sprites/missile.png'),
+  mixer_1x1: require('@/assets/sprites/mixer_1x1.png'),
+  mixer_1x2: require('@/assets/sprites/mixer_1x2.png'),
+  mixer_2x1: require('@/assets/sprites/mixer_2x1.png'),
+  mixer_2x2: require('@/assets/sprites/mixer_2x2.png'),
+  mixer_entrance_e: require('@/assets/sprites/mixer_entrance_e.png'),
+  mixer_entrance_n: require('@/assets/sprites/mixer_entrance_n.png'),
+  mixer_entrance_s: require('@/assets/sprites/mixer_entrance_s.png'),
+  mixer_entrance_w: require('@/assets/sprites/mixer_entrance_w.png'),
+  mixer_exit_e: require('@/assets/sprites/mixer_exit_e.png'),
+  mixer_exit_n: require('@/assets/sprites/mixer_exit_n.png'),
+  mixer_exit_s: require('@/assets/sprites/mixer_exit_s.png'),
+  mixer_exit_w: require('@/assets/sprites/mixer_exit_w.png'),
+  mixer_path: require('@/assets/sprites/mixer_path.png'),
+  mortar: require('@/assets/sprites/mortar.png'),
+  mothership: require('@/assets/sprites/mothership.png'),
+  rocket: require('@/assets/sprites/rocket.png'),
+  rocket_tower: require('@/assets/sprites/rocket_tower.png'),
+  rocket_tower2: require('@/assets/sprites/rocket_tower2.png'),
+  rocket_tower3: require('@/assets/sprites/rocket_tower3.png'),
+  runner: require('@/assets/sprites/runner.png'),
+  sam_tower: require('@/assets/sprites/sam_tower.png'),
+  sam_tower2: require('@/assets/sprites/sam_tower2.png'),
+  shell_large: require('@/assets/sprites/shell_large.png'),
+  shell_small: require('@/assets/sprites/shell_small.png'),
+  soldier: require('@/assets/sprites/soldier.png'),
+  teleport_explosion: require('@/assets/sprites/teleport_explosion.png'),
+  teleport_tower_armed: require('@/assets/sprites/teleport_tower_armed.png'),
+  teleport_tower_unarmed: require('@/assets/sprites/teleport_tower_unarmed.png'),
+  titan: require('@/assets/sprites/titan.png'),
+  truck: require('@/assets/sprites/truck.png'),
+  uranium_bullet: require('@/assets/sprites/uranium_bullet.png'),
+};
+
+export const LEVEL_SOURCES: Record<LevelImageId, number> = {
+  basic_level: require('@/assets/levels/basic_level.jpg'),
+  courtyard_level: require('@/assets/levels/courtyard_level.jpg'),
+  cross_level: require('@/assets/levels/cross_level.jpg'),
+  mixer_level: require('@/assets/levels/mixer_level.jpg'),
+  roadway_level: require('@/assets/levels/roadway_level.jpg'),
+  skytower_level: require('@/assets/levels/skytower_level.jpg'),
+  threeway_level: require('@/assets/levels/threeway_level.jpg'),
+};
+
+/** Robot portraits from the original title screen. */
+export const TITLE_SOURCES: number[] = [
+  require('@/assets/title/title1.jpg'),
+  require('@/assets/title/title2.jpg'),
+  require('@/assets/title/title3.jpg'),
+  require('@/assets/title/title4.jpg'),
+  require('@/assets/title/title5.jpg'),
+  require('@/assets/title/title6.jpg'),
+  require('@/assets/title/title7.jpg'),
+  require('@/assets/title/title8.jpg'),
+  require('@/assets/title/title9.jpg'),
+];
+
+export const UI_SOURCES = {
+  heart: require('@/assets/ui/heart.png'),
+  icon: require('@/assets/ui/icon.png'),
+};
