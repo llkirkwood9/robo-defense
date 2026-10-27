@@ -453,6 +453,9 @@ function applyTowerMix(t: TowerProps[], seed: number) {
   }
 }
 
+/** Which enemies a tower can attack. */
+export type TowerTargets = 'ground' | 'air' | 'both';
+
 /** Per-session tower statistics. */
 export class TowerTable {
   private readonly props: TowerProps[];
@@ -482,6 +485,31 @@ export class TowerTable {
       value += Math.trunc(this.props[t].cost / 2);
     }
     return this.rewards.level(Reward.FleaMarket) > 0 ? value + Math.trunc(value / 2) : value;
+  }
+
+  /**
+   * Which enemies a tower can attack (mirrors `Tower.isValidTarget`), or null for towers that
+   * don't attack enemies directly.
+   */
+  targets(type: TowerType): TowerTargets | null {
+    switch (this.props[type].shotType) {
+      case ShotType.None:
+      case ShotType.Teleport:
+        return null;
+      case ShotType.AntiairBullet:
+      case ShotType.SurfaceToAir:
+        return 'air';
+      case ShotType.Mine:
+        return this.rewards.level(Reward.AirBurst) > 0 ? 'both' : 'ground';
+      case ShotType.Fire:
+      case ShotType.SlowFire:
+      case ShotType.Mortar:
+      case ShotType.Artillery:
+      case ShotType.NapalmShell:
+        return 'ground';
+      default:
+        return 'both';
+    }
   }
 
   /** Sprite frame for a tower's turret, or -1 when the tower has no turret layer. */

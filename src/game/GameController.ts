@@ -12,6 +12,8 @@ import type { SharedValue } from 'react-native-reanimated';
 
 import type { Achievement } from '@/engine/achievements';
 import { FAST_FORWARD_EXTRA_TICKS, GRID, RunState, TICKS_PER_SECOND } from '@/engine/constants';
+import { ENEMIES } from '@/engine/enemies';
+import type { EnemyType } from '@/engine/enemies';
 import type { Tower } from '@/engine/entities';
 import type {
   GameEvent,
@@ -22,6 +24,7 @@ import type {
 } from '@/engine/gameState';
 import { GameState } from '@/engine/gameState';
 import { MAP_NAMES } from '@/engine/maps';
+import { Reward } from '@/engine/rewards';
 import { TowerTable, TowerType } from '@/engine/towers';
 import { createStore } from '@/lib/store';
 import { Camera } from '@/render/camera';
@@ -74,8 +77,16 @@ export interface FeedState {
   achievements: { id: number; index: Achievement }[];
   /** Pending score popups ("+N"), consumed by the HUD. */
   scoreAdds: { id: number; amount: number }[];
-  levelBanner: { id: number; level: number } | null;
-  gameOver: { summary: ScoreSummary | null; outcome: GameOutcome } | null;
+  /** `preview` lists the wave's enemies, e.g. "12 × Soldier · 3 × Jet". */
+  levelBanner: { id: number; level: number; preview: string } | null;
+  gameOver: {
+    summary: ScoreSummary | null;
+    outcome: GameOutcome;
+    /** The wave the game ended on. */
+    level: number;
+    /** The game earned more upgrade points than any before. */
+    newBest: boolean;
+  } | null;
 }
 
 let nextId = 1;
@@ -149,11 +160,7 @@ export class GameController {
     this.picture = picture;
     this.images = images;
     soundBoard.load();
-    this.dirty = true;
-    if (this.rafId === null) {
-      this.lastTime = performance.now();
-      this.rafId = requestAnimationFrame(this.onFrame);
-    }
+    this.invalidate();
   }
 
   detach(): void {
@@ -172,7 +179,7 @@ export class GameController {
       const entrance = this.state.layout.paths[0];
       this.camera.frame(entrance.startX * GRID, entrance.startY * GRID, readZoom());
     }
-    this.dirty = true;
+    this.invalidate();
   }
 
   // ---- Loop -----------------------------------------------------------------------------------
@@ -180,6 +187,7 @@ export class GameController {
   private onFrame = (now: number) => {
     this.accumulator += Math.min(now - this.lastTime, 250);
     this.lastTime = now;
+    const tickBefore = this.state.tick;
     let ticks = 0;
     while (this.accumulator >= TICK_MS) {
       this.accumulator -= TICK_MS;
@@ -189,11 +197,36 @@ export class GameController {
         break;
       }
     }
-    if (ticks > 0 || this.dirty) {
+    // The world only changes when the simulation advances; otherwise redraw on demand.
+    if (this.state.tick !== tickBefore || this.dirty) {
       this.draw();
     }
-    this.rafId = requestAnimationFrame(this.onFrame);
+    // Sleep while paused, before the first wave and after the game ends: nothing moves, so there's
+    // no need to wake the JS thread every frame. `wake()` restarts the loop on the next change.
+    if (this.state.isRunning || this.dirty) {
+      this.rafId = requestAnimationFrame(this.onFrame);
+    } else {
+      // Achievements earned on the last tick (e.g. at game over) are announced before sleeping.
+      this.state.dequeueAchievements();
+      this.rafId = null;
+    }
   };
+
+  /** Restarts a sleeping frame loop (no-op while it is running or detached). */
+  private wake(): void {
+    if (this.rafId === null && this.picture) {
+      // Resume timing from now so the sleep isn't replayed as catch-up ticks.
+      this.lastTime = performance.now();
+      this.accumulator = 0;
+      this.rafId = requestAnimationFrame(this.onFrame);
+    }
+  }
+
+  /** Marks the view as needing a redraw. */
+  private invalidate(): void {
+    this.dirty = true;
+    this.wake();
+  }
 
   private step(): void {
     const s = this.state;
@@ -250,6 +283,9 @@ export class GameController {
 
   private syncHud(): void {
     this.hud.set(this.hudValues());
+    // Every command that can change the run state syncs the HUD, so this also wakes the loop when
+    // a game starts or resumes.
+    this.wake();
   }
 
   // ---- Engine events --------------------------------------------------------------------------
@@ -269,11 +305,13 @@ export class GameController {
         markTowerBought(event.tower);
         break;
       case 'enemySpawned':
-        markEnemySeen(event.enemy);
+        if (markEnemySeen(event.enemy)) {
+          this.toast(`New robot spotted: ${ENEMIES[event.enemy].name}. See it in the Guide.`);
+        }
         break;
       case 'towersChanged':
         this.hud.set((h) => ({ towerVersion: h.towerVersion + 1 }));
-        this.dirty = true;
+        this.invalidate();
         break;
       case 'scoreAdded':
         this.feed.set((f) => ({
@@ -287,7 +325,9 @@ export class GameController {
         }));
         break;
       case 'levelStarted':
-        this.feed.set({ levelBanner: { id: nextId++, level: event.level } });
+        this.feed.set({
+          levelBanner: { id: nextId++, level: event.level, preview: this.wavePreview() },
+        });
         break;
       case 'message':
         this.toast(event.text, event.error);
@@ -297,17 +337,42 @@ export class GameController {
         break;
       case 'gameOver': {
         const won = event.outcome === 'won';
-        recordGameOver(event.summary, won, this.config);
+        const newBest = recordGameOver(event.summary, won, this.config);
         if (won) {
           haptics.success();
         } else if (event.outcome === 'lost') {
           haptics.error();
         }
         this.closeUpgradePanel();
-        this.feed.set({ gameOver: { summary: event.summary, outcome: event.outcome } });
+        this.feed.set({
+          gameOver: {
+            summary: event.summary,
+            outcome: event.outcome,
+            level: event.level,
+            newBest,
+          },
+        });
         break;
       }
     }
+  }
+
+  /**
+   * Summarises the coming wave (with the Wave Intel upgrade; otherwise empty). Robots not met yet
+   * stay a mystery, as in the Guide.
+   */
+  private wavePreview(): string {
+    if (rewards.level(Reward.WaveIntel) === 0) {
+      return '';
+    }
+    const counts = new Map<EnemyType, number>();
+    for (const g of this.state.pendingGroups) {
+      counts.set(g.type, (counts.get(g.type) ?? 0) + g.count);
+    }
+    const seen = profileStore.get().discovered.enemies;
+    return [...counts]
+      .map(([type, n]) => `${n} × ${seen.includes(type) ? ENEMIES[type].name : 'Unknown robot'}`)
+      .join(' · ');
   }
 
   toast(text: string, error = false): void {
@@ -333,7 +398,7 @@ export class GameController {
     this.feed.set({ gameOver: null });
     this.state.start();
     this.syncHud();
-    this.dirty = true;
+    this.invalidate();
   }
 
   togglePause(): void {
@@ -374,19 +439,19 @@ export class GameController {
   cheat(apply: (state: GameState) => void): void {
     apply(this.state);
     this.syncHud();
-    this.dirty = true;
+    this.invalidate();
   }
 
   // ---- Camera gestures ------------------------------------------------------------------------
 
   panBy(dx: number, dy: number): void {
     this.camera.pan(dx, dy);
-    this.dirty = true;
+    this.invalidate();
   }
 
   zoomBy(factor: number, focusX: number, focusY: number): void {
     this.camera.zoom(factor, focusX, focusY);
-    this.dirty = true;
+    this.invalidate();
   }
 
   /** Persists the zoom level when a pinch ends. */
@@ -408,12 +473,12 @@ export class GameController {
     } else {
       this.hud.set({ selected: null });
     }
-    this.dirty = true;
+    this.invalidate();
   }
 
   closeUpgradePanel(): void {
     this.hud.set({ selected: null });
-    this.dirty = true;
+    this.invalidate();
   }
 
   /** Buys an upgrade (or sells, for `TowerType.Sell`) for the selected tower. */
@@ -456,7 +521,7 @@ export class GameController {
     if (!this.ghost || this.ghost.x !== x || this.ghost.y !== y || this.ghost.type !== type) {
       this.ghost = { type, x, y, valid: false };
       this.refreshGhost();
-      this.dirty = true;
+      this.invalidate();
     }
   }
 
@@ -467,7 +532,7 @@ export class GameController {
       this.state.canPlaceTower(g.x, g.y, g.type, false);
     if (valid !== g.valid) {
       g.valid = valid;
-      this.dirty = true;
+      this.invalidate();
     }
   }
 
@@ -486,7 +551,7 @@ export class GameController {
   cancelDrag(): void {
     if (this.ghost) {
       this.ghost = null;
-      this.dirty = true;
+      this.invalidate();
     }
   }
 }

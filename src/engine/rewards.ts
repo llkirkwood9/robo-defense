@@ -30,6 +30,8 @@ export enum Reward {
   AirBurst = 20,
   Shockwave = 21,
   FlareTowerUnlocked = 22,
+  /** Not in the original: wave banners preview the coming robots. */
+  WaveIntel = 23,
 }
 
 /** How a reward's level changes the value it is applied to. */
@@ -54,6 +56,11 @@ interface RewardDef {
   baseCost: number;
   multiplier: number;
   increase: Increase;
+  /**
+   * Unlocks with a set price. They don't count towards (or follow) the rising price of the
+   * original unlocks, so adding one leaves the other unlocks' prices unchanged.
+   */
+  fixedCost?: number;
 }
 
 const levelled = (
@@ -173,6 +180,10 @@ const REWARD_DEFS: readonly RewardDef[] = [
     'Unlock Flare Tower',
     'Flares deal slow and fire damage to passing enemies',
   ),
+  {
+    ...unlock('WAVE_INTEL', 'Wave Intel', 'Wave banners preview the robots coming in each wave'),
+    fixedCost: 100000,
+  },
 ];
 
 export const REWARD_COUNT = REWARD_DEFS.length;
@@ -279,9 +290,13 @@ export class Rewards implements RewardLevels {
 
   nextLevelCost(type: Reward): number {
     const def = REWARD_DEFS[type];
+    if (def.fixedCost !== undefined) {
+      return def.fixedCost;
+    }
     if (def.baseCost === 0) {
       const unlocked = REWARD_DEFS.filter(
-        (d, i) => d.increase === Increase.Unlocked && this.levels[i] > 0,
+        (d, i) =>
+          d.increase === Increase.Unlocked && d.fixedCost === undefined && this.levels[i] > 0,
       ).length;
       return UNLOCK_COST * (unlocked + 1);
     }

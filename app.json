@@ -20,7 +20,7 @@
       "package": "me.llkirkwood.robodefense",
       "adaptiveIcon": {
         "backgroundColor": "#05070D",
-        "foregroundImage": "./assets/ui/icon.png"
+        "foregroundImage": "./assets/ui/splash-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -32,7 +32,7 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/ui/icon.png"
+      "favicon": "./assets/ui/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -40,7 +40,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#05070D",
-          "image": "./assets/ui/icon.png",
+          "image": "./assets/ui/splash-icon.png",
           "imageWidth": 96
         }
       ],

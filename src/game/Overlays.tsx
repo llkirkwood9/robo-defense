@@ -108,12 +108,14 @@ export function StartCard({ controller }: { controller: GameController }) {
 export function PauseMenu({
   controller,
   onOptions,
+  onGuide,
   onSaveAndExit,
   onAbandon,
   onDevTools,
 }: {
   controller: GameController;
   onOptions: () => void;
+  onGuide: () => void;
   onSaveAndExit: () => void;
   onAbandon: () => void;
   /** Opens the developer panel; the button is hidden when omitted. */
@@ -138,7 +140,15 @@ export function PauseMenu({
               size="lg"
               onPress={() => controller.togglePause()}
             />
-            <GlassButton label="Options" icon="settings" onPress={onOptions} />
+            <View style={styles.row}>
+              <GlassButton label="Guide" icon="enemies" style={styles.flex} onPress={onGuide} />
+              <GlassButton
+                label="Options"
+                icon="settings"
+                style={styles.flex}
+                onPress={onOptions}
+              />
+            </View>
             <GlassButton label="Save & Exit" icon="save" onPress={onSaveAndExit} />
             <GlassButton label="Abandon Game" icon="exit" tone="danger" onPress={onAbandon} />
             {onDevTools && (
@@ -168,10 +178,10 @@ const TITLES: Record<GameOutcome, string> = {
   abandoned: 'Game Abandoned',
 };
 
-const MESSAGES: Record<GameOutcome, string> = {
-  won: 'All 100 waves defeated. The next difficulty level is unlocked.',
-  lost: 'The robots broke through.',
-  abandoned: 'Your score has been banked as upgrade points.',
+const MESSAGES: Record<GameOutcome, (level: number) => string> = {
+  won: () => 'All 100 waves defeated. The next difficulty level is unlocked.',
+  lost: (level) => `The robots broke through on wave ${level}.`,
+  abandoned: () => 'Your score has been banked as upgrade points.',
 };
 
 export function GameOverCard({
@@ -185,7 +195,7 @@ export function GameOverCard({
   if (!result) {
     return null;
   }
-  const { summary, outcome } = result;
+  const { summary, outcome, level, newBest } = result;
   const won = outcome === 'won';
   const rows = summary ? summaryRows(summary) : [];
   return (
@@ -204,7 +214,7 @@ export function GameOverCard({
             />
             <Text variant="title">{TITLES[outcome]}</Text>
           </View>
-          <Text variant="caption">{MESSAGES[outcome]}</Text>
+          <Text variant="caption">{MESSAGES[outcome](level)}</Text>
 
           {summary && (
             <View style={styles.summary}>
@@ -231,6 +241,17 @@ export function GameOverCard({
                   {summary.total.toLocaleString()}
                 </Text>
               </Animated.View>
+              {newBest && (
+                <Animated.View
+                  entering={FadeInDown.delay(450 + rows.length * 220)}
+                  style={styles.bestRow}
+                >
+                  <Icon name="star" size={16} color={colors.gold} />
+                  <Text variant="label" color={colors.gold}>
+                    New personal best!
+                  </Text>
+                </Animated.View>
+              )}
             </View>
           )}
 
@@ -326,7 +347,11 @@ export function LevelBanner({ controller }: { controller: GameController }) {
   const banner = useStore(controller.feed, selectBanner);
   useEffect(() => {
     if (!banner) return;
-    const id = setTimeout(() => controller.feed.set({ levelBanner: null }), 1400);
+    // Linger longer when there's a wave preview to read.
+    const id = setTimeout(
+      () => controller.feed.set({ levelBanner: null }),
+      banner.preview ? 2600 : 1400,
+    );
     return () => clearTimeout(id);
   }, [banner, controller]);
   if (!banner) {
@@ -346,6 +371,11 @@ export function LevelBanner({ controller }: { controller: GameController }) {
       <Text variant="display" style={styles.bannerText}>
         WAVE {banner.level}
       </Text>
+      {banner.preview ? (
+        <Text variant="label" style={styles.bannerPreview}>
+          {banner.preview}
+        </Text>
+      ) : null}
     </Animated.View>
   );
 }
@@ -515,6 +545,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
+  bestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
   summary: {
     gap: spacing.xs,
   },
@@ -566,6 +603,13 @@ const styles = StyleSheet.create({
     fontSize: 34,
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowRadius: 12,
+  },
+  bannerPreview: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xl,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowRadius: 8,
   },
   devCard: {
     width: 560,

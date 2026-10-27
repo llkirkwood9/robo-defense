@@ -72,7 +72,8 @@ export type GameEvent =
   | { type: 'towersChanged' }
   | { type: 'levelStarted'; level: number }
   | { type: 'autosave' }
-  | { type: 'gameOver'; summary: ScoreSummary | null; outcome: GameOutcome };
+  /** `level` is the wave the game ended on. */
+  | { type: 'gameOver'; summary: ScoreSummary | null; outcome: GameOutcome; level: number };
 
 export interface GameServices {
   towerTable: TowerTable;
@@ -210,6 +211,11 @@ export class GameState implements World {
 
   get levelNum(): number {
     return this.waves.levelNum;
+  }
+
+  /** Enemy groups still to spawn in the current wave (for the wave preview). */
+  get pendingGroups(): { type: EnemyType; count: number }[] {
+    return this.waves.pendingGroups();
   }
 
   get isActive(): boolean {
@@ -624,10 +630,11 @@ export class GameState implements World {
       }
       // Capture the result before the session resets.
       const won = newState === RunState.Won;
+      const level = this.levelNum;
       this.initGame();
       this.runState = newState;
       const outcome: GameOutcome = won ? 'won' : newState === RunState.Lost ? 'lost' : 'abandoned';
-      this.services.emit({ type: 'gameOver', summary, outcome });
+      this.services.emit({ type: 'gameOver', summary, outcome, level });
     }
     this.services.achievements.flush();
   }
@@ -748,7 +755,8 @@ export class GameState implements World {
     inc(Achievement.Survival100, this.config.survival);
   }
 
-  private dequeueAchievements(): void {
+  /** Announces queued achievements (also called by the frame loop before it sleeps). */
+  dequeueAchievements(): void {
     for (
       let a = this.services.achievements.dequeueEarned();
       a !== undefined;

@@ -8,7 +8,7 @@ import { StyleSheet, View } from 'react-native';
 import { GRID, TICKS_PER_SECOND } from '@/engine/constants';
 import { ShotType } from '@/engine/data/projectiles';
 import { TowerTable, TowerType } from '@/engine/towers';
-import type { TowerProps } from '@/engine/towers';
+import type { TowerTargets } from '@/engine/towers';
 import { useStore } from '@/lib/store';
 import { profileStore, rewards } from '@/services/profile';
 import { GlassSurface } from '@/ui/Glass';
@@ -80,33 +80,19 @@ const REWARD_TOWERS = new Set([
   TowerType.Flare,
 ]);
 
-/** Which enemies a tower can hit, or null for towers that don't attack. */
-function targets(p: TowerProps): 'Ground' | 'Air' | 'Ground & air' | null {
-  switch (p.shotType) {
-    case ShotType.None:
-    case ShotType.Teleport:
-      return null;
-    case ShotType.AntiairBullet:
-    case ShotType.SurfaceToAir:
-      return 'Air';
-    case ShotType.Fire:
-    case ShotType.SlowFire:
-    case ShotType.Mortar:
-    case ShotType.Artillery:
-    case ShotType.NapalmShell:
-    case ShotType.Mine:
-      return 'Ground';
-    default:
-      return 'Ground & air';
-  }
-}
+const TARGET_LABELS: Record<TowerTargets, string> = {
+  ground: 'Ground',
+  air: 'Air',
+  both: 'Ground & air',
+};
 
 const ICON_SIZE = 64;
 const ICON_BOX = 96;
 
 function TowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
   const p = table.get(type);
-  const target = targets(p);
+  const targets = table.targets(type);
+  const target = targets && TARGET_LABELS[targets];
   const notes = p.notes.filter((n): n is string => !!n);
   const fires = p.shotType !== ShotType.None && p.shotDelay < 1000;
   const rate = TICKS_PER_SECOND / p.shotDelay;
@@ -216,8 +202,8 @@ export function TowerGuide() {
           {unlocked} of {ORDER.length} towers
         </Text>
         <Text variant="caption">
-          Stats include your upgrades. Range is in tiles; an upgrade&apos;s cost is paid on
-          top of the tower it replaces.
+          Stats include your upgrades. Range is in tiles; an upgrade&apos;s cost is paid on top of
+          the tower it replaces.
         </Text>
       </GlassSurface>
 

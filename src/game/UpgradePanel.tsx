@@ -7,7 +7,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { GRID, TICKS_PER_SECOND } from '@/engine/constants';
 import { TowerType } from '@/engine/towers';
-import type { TowerProps } from '@/engine/towers';
+import type { TowerProps, TowerTargets } from '@/engine/towers';
 import { useStore } from '@/lib/store';
 import { GlassSurface } from '@/ui/Glass';
 import { GlassButton } from '@/ui/GlassButton';
@@ -23,10 +23,10 @@ const selectVersion = (h: HudState) => h.towerVersion;
 const selectMoney = (h: HudState) => h.money;
 
 /**
- * Tower stats as two short lines (power and fire rate, then range). Lines wrap rather than
- * truncate in the narrow upgrade cards.
+ * Tower stats as two short lines (power and fire rate, then range and limits such as "Air only").
+ * Lines wrap rather than truncate in the narrow upgrade cards.
  */
-function describe(p: TowerProps): string[] {
+function describe(p: TowerProps, targets: TowerTargets | null): string[] {
   const attack: string[] = [];
   if (p.power > 0) attack.push(`Power ${p.power}`);
   if (p.shotDelay < 1000 && p.shotType !== 0) {
@@ -35,12 +35,14 @@ function describe(p: TowerProps): string[] {
   }
   const reach: string[] = [];
   if (p.attackRadius > GRID / 5) reach.push(`Range ${(p.attackRadius / GRID).toFixed(1)}`);
+  if (targets === 'air') reach.push('Air only');
+  if (targets === 'ground') reach.push('Ground only');
   if (!p.blocking) reach.push("Doesn't block path");
   return [attack.join(' · '), reach.join(' · ')].filter((line) => line.length > 0);
 }
 
-function StatLines({ props }: { props: TowerProps }) {
-  return describe(props).map((line) => (
+function StatLines({ props, targets }: { props: TowerProps; targets: TowerTargets | null }) {
+  return describe(props, targets).map((line) => (
     <Text key={line} variant="caption">
       {line}
     </Text>
@@ -52,10 +54,12 @@ const PANEL_TINT = 'rgba(8, 12, 22, 0.55)';
 
 function UpgradeOption({
   props,
+  targets,
   money,
   onPress,
 }: {
   props: TowerProps;
+  targets: TowerTargets | null;
   money: number;
   onPress: () => void;
 }) {
@@ -90,7 +94,7 @@ function UpgradeOption({
           >
             ${props.cost}
           </Text>
-          <StatLines props={props} />
+          <StatLines props={props} targets={targets} />
           {notes.length > 0 && (
             <Text variant="caption" color={colors.accent}>
               {notes.join(' · ')}
@@ -135,7 +139,7 @@ export function UpgradePanel({ controller }: { controller: GameController }) {
               <Text variant="title" style={styles.title}>
                 {props.label}
               </Text>
-              <StatLines props={props} />
+              <StatLines props={props} targets={table.targets(tower.type)} />
             </View>
             <GlassButton
               icon="close"
@@ -151,6 +155,7 @@ export function UpgradePanel({ controller }: { controller: GameController }) {
                 <UpgradeOption
                   key={u}
                   props={table.get(u)}
+                  targets={table.targets(u)}
                   money={money}
                   onPress={() => controller.upgradeSelected(u)}
                 />
@@ -205,6 +210,8 @@ const styles = StyleSheet.create({
     flexBasis: '45%',
   },
   optionSurface: {
+    // Fill the row's height so side-by-side options match when one label wraps.
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,

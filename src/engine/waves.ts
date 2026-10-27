@@ -193,6 +193,16 @@ export class WaveRunner {
     return (this.data[this.cursor.index] ?? 0) === 0;
   }
 
+  /** The current wave's groups that haven't started spawning yet, in spawn order. */
+  pendingGroups(): { type: EnemyType; count: number }[] {
+    const groups: { type: EnemyType; count: number }[] = [];
+    for (let i = this.cursor.index; (this.data[i] ?? 0) !== 0; i++) {
+      const val = this.data[i];
+      groups.push({ type: (val >> 10) & 31, count: (val >> 3) & 127 });
+    }
+    return groups;
+  }
+
   /** Developer tool: drops the current wave's remaining spawns. */
   skipSpawns(): void {
     const c = this.cursor;

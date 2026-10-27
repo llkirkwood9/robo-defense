@@ -1,14 +1,20 @@
 /**
  * Animated menu background: a slowly drifting map from the game, darkened so glass panels and
  * text stay readable (the modern take on the original's fading background images).
+ *
+ * The drift only runs while the screen is focused (a menu left underneath the game or another
+ * screen stops animating, saving battery) and not at all with Reduce Motion on.
  */
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -21,13 +27,18 @@ import { colors } from './theme';
 
 export function Backdrop({ level, dim = 0.55 }: { level: LevelImageId; dim?: number }) {
   const drift = useSharedValue(0);
-  useEffect(() => {
-    drift.value = withRepeat(
-      withTiming(1, { duration: 40000, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true,
-    );
-  }, [drift]);
+  const reduceMotion = useReducedMotion();
+  useFocusEffect(
+    useCallback(() => {
+      if (reduceMotion) {
+        return;
+      }
+      drift.set(
+        withRepeat(withTiming(1, { duration: 40000, easing: Easing.inOut(Easing.quad) }), -1, true),
+      );
+      return () => cancelAnimation(drift);
+    }, [drift, reduceMotion]),
+  );
 
   const animated = useAnimatedStyle(() => ({
     transform: [

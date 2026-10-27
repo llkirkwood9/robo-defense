@@ -9,4 +9,5 @@ export const Keys = {
   zoom: 'zoom',
   survivorShown: 'survivorShown',
   discovered: 'discovered',
+  bestScore: 'bestScore',
 } as const;

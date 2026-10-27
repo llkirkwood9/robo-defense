@@ -7,8 +7,10 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 
+import { RunState } from '@/engine/constants';
 import { GameCanvas } from '@/game/GameCanvas';
 import { GameController } from '@/game/GameController';
+import type { HudState } from '@/game/GameController';
 import { Hud } from '@/game/Hud';
 import {
   AchievementToast,
@@ -58,12 +60,16 @@ function KeepAwake() {
 }
 
 const selectKeepAwake = (s: ReturnType<typeof profileStore.get>) => s.options.keepAwake;
+/** Waves are playing (not paused, waiting to start or over). */
+const selectPlaying = (h: HudState) =>
+  h.runState === RunState.Running || h.runState === RunState.FastForward;
 
 export default function GameScreen() {
   const { resume } = useLocalSearchParams<{ resume?: string }>();
   const [controller] = useState(() => createController(resume === '1'));
   const { images, error } = useGameImages(controller.state.layout.image);
   const keepAwake = useStore(profileStore, selectKeepAwake);
+  const playing = useStore(controller.hud, selectPlaying);
   const [devOpen, setDevOpen] = useState(false);
   const closeDev = useCallback(() => setDevOpen(false), []);
 
@@ -144,7 +150,8 @@ export default function GameScreen() {
 
   return (
     <View style={styles.root}>
-      {keepAwake && Platform.OS !== 'web' && <KeepAwake />}
+      {/* Only while waves play: a paused or finished game lets the screen dim and sleep. */}
+      {keepAwake && playing && Platform.OS !== 'web' && <KeepAwake />}
       <GameCanvas controller={controller} images={images} />
       <Hud controller={controller} />
       <TowerDock controller={controller} />
@@ -159,6 +166,7 @@ export default function GameScreen() {
         <PauseMenu
           controller={controller}
           onOptions={() => router.push('/options')}
+          onGuide={() => router.push('/guide')}
           onSaveAndExit={saveAndExit}
           onAbandon={abandon}
           onDevTools={__DEV__ ? () => setDevOpen(true) : undefined}

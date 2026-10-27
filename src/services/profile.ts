@@ -71,6 +71,8 @@ interface ProfileState {
   maxLevelWon: number;
   hasQuickSave: boolean;
   discovered: Discovered;
+  /** Most upgrade points earned in a single game. */
+  bestScore: number;
   /** Bumped whenever rewards change (forces reward list refreshes). */
   rewardsVersion: number;
 }
@@ -110,6 +112,7 @@ export const profileStore = createStore<ProfileState>({
   maxLevelWon: readJSON(Keys.maxLevelWon, 0),
   hasQuickSave: readJSON<SavedGame | null>(Keys.quickSave, null) !== null,
   discovered: { enemies: [], towers: [], ...readJSON<Partial<Discovered>>(Keys.discovered, {}) },
+  bestScore: readJSON(Keys.bestScore, 0),
   rewardsVersion: 0,
 });
 
@@ -148,10 +151,24 @@ export function sessionConfigFromSettings(): SessionConfig {
   };
 }
 
-/** Banks a finished game's reward points and unlocks the next difficulty on a win. */
-export function recordGameOver(summary: ScoreSummary | null, won: boolean, config: SessionConfig) {
+/**
+ * Banks a finished game's upgrade points and unlocks the next difficulty on a win. Returns whether
+ * the game beat a previous best score (the first game played sets the best without beating one).
+ */
+export function recordGameOver(
+  summary: ScoreSummary | null,
+  won: boolean,
+  config: SessionConfig,
+): boolean {
+  let newBest = false;
   if (summary) {
     rewards.addPoints(summary.total);
+    const { bestScore } = profileStore.get();
+    if (summary.total > bestScore) {
+      newBest = bestScore > 0;
+      writeJSON(Keys.bestScore, summary.total);
+      profileStore.set({ bestScore: summary.total });
+    }
   }
   if (won) {
     const maxLevelWon = Math.max(profileStore.get().maxLevelWon, config.difficulty);
@@ -160,6 +177,7 @@ export function recordGameOver(summary: ScoreSummary | null, won: boolean, confi
     updateNewGame({ difficulty: config.difficulty + 1 });
   }
   clearQuickSave();
+  return newBest;
 }
 
 /** Developer tool: sets the highest difficulty won, which controls the difficulty limit. */
@@ -176,12 +194,17 @@ function setDiscovered(discovered: Discovered): void {
   profileStore.set({ discovered });
 }
 
-/** Records that an enemy type has appeared in a game, unlocking it in the field guide. */
-export function markEnemySeen(type: EnemyType): void {
+/**
+ * Records that an enemy type has appeared in a game, unlocking it in the field guide. Returns
+ * whether this was the first sighting.
+ */
+export function markEnemySeen(type: EnemyType): boolean {
   const { discovered } = profileStore.get();
-  if (!discovered.enemies.includes(type)) {
-    setDiscovered({ ...discovered, enemies: [...discovered.enemies, type] });
+  if (discovered.enemies.includes(type)) {
+    return false;
   }
+  setDiscovered({ ...discovered, enemies: [...discovered.enemies, type] });
+  return true;
 }
 
 /** Records that a tower type has been built or upgraded to, unlocking it in the tower guide. */

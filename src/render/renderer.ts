@@ -70,6 +70,11 @@ export class WorldRenderer {
   private readonly strokePaint: SkPaint = Skia.Paint();
   private font: SkFont | null = null;
   private readonly starfield = new Starfield();
+  /** World-space bounds of the screen for the frame being drawn; sprites outside are skipped. */
+  private viewLeft = 0;
+  private viewTop = 0;
+  private viewRight = 0;
+  private viewBottom = 0;
 
   constructor() {
     // Status tints use the same multiply colours as the original.
@@ -95,6 +100,10 @@ export class WorldRenderer {
     const mapH = layout.height * GRID;
     const sw = camera.screenWidth;
     const sh = camera.screenHeight;
+    this.viewLeft = camera.toWorldX(0);
+    this.viewTop = camera.toWorldY(0);
+    this.viewRight = camera.toWorldX(sw);
+    this.viewBottom = camera.toWorldY(sh);
 
     // Space backdrop with stars around the map edges.
     this.paint.setColor(BACKDROP);
@@ -183,6 +192,15 @@ export class WorldRenderer {
     paint: SkPaint,
   ): void {
     const sheet = SPRITES[id];
+    // Skip sprites entirely off screen (common when zoomed in) to keep each frame's recording small.
+    if (
+      x > this.viewRight ||
+      y > this.viewBottom ||
+      x + sheet.frameWidth < this.viewLeft ||
+      y + sheet.frameHeight < this.viewTop
+    ) {
+      return;
+    }
     canvas.drawImageRect(
       sprites[id],
       Skia.XYWHRect(frame * sheet.frameWidth, 0, sheet.frameWidth, sheet.frameHeight),

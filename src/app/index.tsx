@@ -79,9 +79,6 @@ export default function TitleScreen() {
       <SafeAreaView style={styles.safe} edges={['left', 'right', 'top', 'bottom']}>
         <View style={styles.hero}>
           <Animated.View entering={FadeInDown.duration(700)}>
-            <Text variant="caption" style={styles.kicker}>
-              TOWER DEFENSE
-            </Text>
             <Text
               variant="display"
               style={[styles.title, { fontSize: titleSize }]}
@@ -89,6 +86,9 @@ export default function TitleScreen() {
               numberOfLines={1}
             >
               ROBO DEFENSE
+            </Text>
+            <Text variant="caption" style={styles.kicker}>
+              &nbsp;RELOADED
             </Text>
           </Animated.View>
           <Animated.View entering={FadeInDown.delay(150).duration(700)} style={styles.chips}>

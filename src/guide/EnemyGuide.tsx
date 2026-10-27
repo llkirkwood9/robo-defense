@@ -4,7 +4,7 @@
  * until they first appear in a game.
  */
 import Slider from '@react-native-community/slider';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Dir, GRID_SUB, TICKS_PER_SECOND } from '@/engine/constants';
@@ -18,7 +18,7 @@ import {
 } from '@/engine/enemies';
 import { PERFECT_LEVELS_FOR_TITAN } from '@/engine/gameState';
 import { NUM_LEVELS } from '@/engine/waves';
-import { useStore } from '@/lib/store';
+import { createStore, useStore } from '@/lib/store';
 import { maxDifficulty, profileStore } from '@/services/profile';
 import { GlassSurface } from '@/ui/Glass';
 import { GlassButton } from '@/ui/GlassButton';
@@ -55,30 +55,54 @@ const cellsPerSecond = (type: EnemyType) => (ENEMIES[type].speed * TICKS_PER_SEC
 
 const SPRITE_BOX = 96;
 
-function EnemyFrame({ type, tick, tintColor }: { type: EnemyType; tick: number; tintColor?: string }) {
+function EnemyFrame({
+  type,
+  frame,
+  tintColor,
+}: {
+  type: EnemyType;
+  frame: number;
+  tintColor?: string;
+}) {
   const p = ENEMIES[type];
   const sheet = SPRITES[p.sprite];
   const width = Math.min(SPRITE_BOX, (SPRITE_BOX * sheet.frameWidth) / sheet.frameHeight);
-  return (
-    <SpriteFrame
-      sprite={p.sprite}
-      frame={enemyFrame(type, Dir.Down, tick)}
-      width={width}
-      tintColor={tintColor}
-    />
-  );
+  return <SpriteFrame sprite={p.sprite} frame={frame} width={width} tintColor={tintColor} />;
+}
+
+/**
+ * One animation clock shared by every sprite on the page (rather than a timer per card). It only
+ * runs while at least one animated sprite is mounted.
+ */
+const clock = createStore({ tick: 0 });
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+let clockUsers = 0;
+
+function useClock<T>(selector: (c: { tick: number }) => T): T {
+  useEffect(() => {
+    if (clockUsers++ === 0) {
+      clockTimer = setInterval(
+        () => clock.set((c) => ({ tick: c.tick + 1 })),
+        1000 / TICKS_PER_SECOND,
+      );
+    }
+    return () => {
+      if (--clockUsers === 0 && clockTimer !== null) {
+        clearInterval(clockTimer);
+        clockTimer = null;
+      }
+    };
+  }, []);
+  return useStore(clock, selector);
 }
 
 /** The enemy walking (or flying) towards the viewer, animated at the game's tick rate. */
 function EnemySprite({ type }: { type: EnemyType }) {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000 / TICKS_PER_SECOND);
-    return () => clearInterval(id);
-  }, []);
+  // Selecting the frame (not the tick) re-renders only when the visible frame changes.
+  const frame = useClock(useCallback((c) => enemyFrame(type, Dir.Down, c.tick), [type]));
   return (
     <View style={styles.spriteBox}>
-      <EnemyFrame type={type} tick={tick} />
+      <EnemyFrame type={type} frame={frame} />
     </View>
   );
 }
@@ -87,7 +111,11 @@ function LockedEnemyCard({ type }: { type: EnemyType }) {
   return (
     <GlassSurface radius={radii.md} style={styles.card}>
       <View style={styles.spriteBox}>
-        <SpriteOutline render={(tint) => <EnemyFrame type={type} tick={0} tintColor={tint} />} />
+        <SpriteOutline
+          render={(tint) => (
+            <EnemyFrame type={type} frame={enemyFrame(type, Dir.Down, 0)} tintColor={tint} />
+          )}
+        />
       </View>
       <LockedLabel hint="Face this robot in battle to unlock it." />
     </GlassSurface>
