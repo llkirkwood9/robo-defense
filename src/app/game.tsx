@@ -104,6 +104,36 @@ export default function GameScreen() {
     }, [controller]),
   );
 
+  // Web keyboard shortcuts: Space pauses or resumes, F toggles fast-forward and Escape closes the
+  // upgrade panel or toggles the pause menu.
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'web') {
+        return;
+      }
+      const onKey = (e: KeyboardEvent) => {
+        if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) {
+          return;
+        }
+        const { state } = controller;
+        if (e.key === ' ' && state.isActive) {
+          controller.togglePause();
+        } else if (e.key.toLowerCase() === 'f' && state.isRunning) {
+          controller.toggleFastForward();
+        } else if (e.key === 'Escape' && controller.hud.get().selected) {
+          controller.closeUpgradePanel();
+        } else if (e.key === 'Escape' && state.isActive) {
+          controller.togglePause();
+        } else {
+          return;
+        }
+        e.preventDefault();
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, [controller]),
+  );
+
   const exitToMenu = () => {
     if (router.canDismiss()) {
       router.dismissTo('/');

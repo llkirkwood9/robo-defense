@@ -10,4 +10,5 @@ export const Keys = {
   survivorShown: 'survivorShown',
   discovered: 'discovered',
   bestScore: 'bestScore',
+  stats: 'stats',
 } as const;

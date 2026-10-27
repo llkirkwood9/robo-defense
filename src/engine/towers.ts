@@ -488,14 +488,17 @@ export class TowerTable {
   }
 
   /**
-   * Which enemies a tower can attack (mirrors `Tower.isValidTarget`), or null for towers that
-   * don't attack enemies directly.
+   * Which enemies a tower can attack (mirrors `Tower.isValidTarget`). Unarmed teleporters and
+   * mines report what they'll hit once armed. Null for towers that never attack.
    */
   targets(type: TowerType): TowerTargets | null {
+    if (type === TowerType.TeleportUnarmed) return this.targets(TowerType.TeleportArmed);
+    if (type === TowerType.MineUnarmed) return this.targets(TowerType.MineArmed);
     switch (this.props[type].shotType) {
       case ShotType.None:
-      case ShotType.Teleport:
         return null;
+      case ShotType.Teleport:
+        return 'both';
       case ShotType.AntiairBullet:
       case ShotType.SurfaceToAir:
         return 'air';

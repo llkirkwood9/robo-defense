@@ -126,10 +126,12 @@ function EnemyCard({
   type,
   wave,
   difficulty,
+  destroyed,
 }: {
   type: EnemyType;
   wave: number;
   difficulty: number;
+  destroyed: number;
 }) {
   const p = ENEMIES[type];
   const blurb = BLURBS[type];
@@ -174,6 +176,9 @@ function EnemyCard({
         <Text variant="caption">
           {blurb}
           {p.isFlyer ? ` ${FLYER_NOTE}` : ''}
+        </Text>
+        <Text variant="caption" color={colors.textFaint}>
+          Destroyed: {destroyed.toLocaleString()}
         </Text>
       </View>
     </GlassSurface>
@@ -233,12 +238,14 @@ function ScaleControl({
 
 const selectDifficulty = (s: ReturnType<typeof profileStore.get>) => s.newGame.difficulty;
 const selectSeen = (s: ReturnType<typeof profileStore.get>) => s.discovered.enemies;
+const selectKills = (s: ReturnType<typeof profileStore.get>) => s.stats.kills;
 
 /** The Enemies tab of the guide. */
 export function EnemyGuide() {
   const maxDiff = maxDifficulty();
   const savedDifficulty = useStore(profileStore, selectDifficulty);
   const seen = useStore(profileStore, selectSeen);
+  const kills = useStore(profileStore, selectKills);
   const [wave, setWave] = useState(1);
   const [difficulty, setDifficulty] = useState(() => Math.min(savedDifficulty, maxDiff));
 
@@ -268,7 +275,13 @@ export function EnemyGuide() {
       <View style={styles.grid}>
         {ORDER.map((type) =>
           seen.includes(type) ? (
-            <EnemyCard key={type} type={type} wave={wave} difficulty={difficulty} />
+            <EnemyCard
+              key={type}
+              type={type}
+              wave={wave}
+              difficulty={difficulty}
+              destroyed={kills[type] ?? 0}
+            />
           ) : (
             <LockedEnemyCard key={type} type={type} />
           ),

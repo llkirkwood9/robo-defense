@@ -69,6 +69,7 @@ export type GameEvent =
   | { type: 'towerBought'; tower: TowerType }
   /** An enemy of this type entered the map. */
   | { type: 'enemySpawned'; enemy: EnemyType }
+  | { type: 'enemyDefeated'; enemy: EnemyType }
   | { type: 'towersChanged' }
   | { type: 'levelStarted'; level: number }
   | { type: 'autosave' }
@@ -565,6 +566,7 @@ export class GameState implements World {
     this.killPopups.push({ tick: this.tick, enemyType: e.type, x: e.pixelX, y: e.pixelY });
     this.score += added;
     this.services.emit({ type: 'scoreAdded', amount: added });
+    this.services.emit({ type: 'enemyDefeated', enemy: e.type });
 
     if (added >= 500) {
       a.increase(Achievement.BigOne, 1);

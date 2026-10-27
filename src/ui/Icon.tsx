@@ -1,5 +1,6 @@
 /**
- * Platform-native icons: SF Symbols on iOS, Material Symbols on Android.
+ * Platform-native icons: SF Symbols on iOS, Material Symbols on Android and web (the web build
+ * renders the same Material Symbols font as Android).
  */
 import { SymbolView } from 'expo-symbols';
 import type { SymbolViewProps } from 'expo-symbols';
@@ -48,6 +49,11 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
+/** Each icon's platform names, with web reusing the Android (Material Symbols) name. */
+const SYMBOLS = Object.fromEntries(
+  Object.entries(ICONS).map(([key, names]) => [key, { ...names, web: names.android }]),
+) as Record<IconName, SymbolViewProps['name']>;
+
 export function Icon({
   name,
   size = 20,
@@ -61,7 +67,7 @@ export function Icon({
 }) {
   return (
     <SymbolView
-      name={ICONS[name] as SymbolViewProps['name']}
+      name={SYMBOLS[name]}
       size={size}
       tintColor={color}
       weight="semibold"

@@ -36,11 +36,15 @@ import { soundBoard } from '@/services/audio';
 import { haptics } from '@/services/haptics';
 import {
   achievements,
+  flushStats,
   markEnemySeen,
   markTowerBought,
   profileStore,
   readZoom,
   recordGameOver,
+  recordKill,
+  recordTowerBuilt,
+  recordWaveReached,
   rewards,
   writeQuickSave,
   writeZoom,
@@ -169,6 +173,8 @@ export class GameController {
       this.rafId = null;
     }
     this.picture = null;
+    // Release the audio players while no game is on screen.
+    soundBoard.unload();
   }
 
   /** Called whenever the canvas is laid out. */
@@ -300,6 +306,10 @@ export class GameController {
         break;
       case 'towerPlaced':
         haptics.impact();
+        recordTowerBuilt();
+        break;
+      case 'enemyDefeated':
+        recordKill(event.enemy);
         break;
       case 'towerBought':
         markTowerBought(event.tower);
@@ -337,7 +347,7 @@ export class GameController {
         break;
       case 'gameOver': {
         const won = event.outcome === 'won';
-        const newBest = recordGameOver(event.summary, won, this.config);
+        const newBest = recordGameOver(event.summary, won, this.config, event.level);
         if (won) {
           haptics.success();
         } else if (event.outcome === 'lost') {
@@ -420,8 +430,13 @@ export class GameController {
 
   /** Writes a quick save if a game is in progress. Returns whether a save was written. */
   saveNow(): boolean {
-    // Persist achievement progress too (counters are otherwise only written at checkpoints).
+    // Persist achievement progress and career records too (counters are otherwise only written at
+    // checkpoints).
     achievements.flush();
+    if (this.state.isActive) {
+      recordWaveReached(this.state.levelNum);
+    }
+    flushStats();
     const save = this.state.save();
     if (save) {
       writeQuickSave(save);

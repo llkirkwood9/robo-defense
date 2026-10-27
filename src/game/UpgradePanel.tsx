@@ -37,6 +37,7 @@ function describe(p: TowerProps, targets: TowerTargets | null): string[] {
   if (p.attackRadius > GRID / 5) reach.push(`Range ${(p.attackRadius / GRID).toFixed(1)}`);
   if (targets === 'air') reach.push('Air only');
   if (targets === 'ground') reach.push('Ground only');
+  if (targets === 'both') reach.push('Ground & air');
   if (!p.blocking) reach.push("Doesn't block path");
   return [attack.join(' · '), reach.join(' · ')].filter((line) => line.length > 0);
 }

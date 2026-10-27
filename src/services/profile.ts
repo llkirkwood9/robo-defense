@@ -62,6 +62,19 @@ export interface Discovered {
   towers: TowerType[];
 }
 
+/** Lifetime records shown on the Guide's Records tab. */
+export interface CareerStats {
+  /** Finished games, including abandoned ones. */
+  gamesPlayed: number;
+  gamesWon: number;
+  /** Furthest wave reached in any game. */
+  highestWave: number;
+  /** Towers placed (upgrades not included). */
+  towersBuilt: number;
+  /** Robots destroyed, indexed by enemy type. */
+  kills: number[];
+}
+
 /** Reactive summary used by menus. */
 interface ProfileState {
   options: Options;
@@ -73,6 +86,7 @@ interface ProfileState {
   discovered: Discovered;
   /** Most upgrade points earned in a single game. */
   bestScore: number;
+  stats: CareerStats;
   /** Bumped whenever rewards change (forces reward list refreshes). */
   rewardsVersion: number;
 }
@@ -113,6 +127,14 @@ export const profileStore = createStore<ProfileState>({
   hasQuickSave: readJSON<SavedGame | null>(Keys.quickSave, null) !== null,
   discovered: { enemies: [], towers: [], ...readJSON<Partial<Discovered>>(Keys.discovered, {}) },
   bestScore: readJSON(Keys.bestScore, 0),
+  stats: {
+    gamesPlayed: 0,
+    gamesWon: 0,
+    highestWave: 0,
+    towersBuilt: 0,
+    kills: [],
+    ...readJSON<Partial<CareerStats>>(Keys.stats, {}),
+  },
   rewardsVersion: 0,
 });
 
@@ -152,14 +174,22 @@ export function sessionConfigFromSettings(): SessionConfig {
 }
 
 /**
- * Banks a finished game's upgrade points and unlocks the next difficulty on a win. Returns whether
- * the game beat a previous best score (the first game played sets the best without beating one).
+ * Banks a finished game's upgrade points, updates the career records and unlocks the next
+ * difficulty on a win. Returns whether the game beat a previous best score (the first game played
+ * sets the best without beating one).
  */
 export function recordGameOver(
   summary: ScoreSummary | null,
   won: boolean,
   config: SessionConfig,
+  level: number,
 ): boolean {
+  updateStats((s) => {
+    s.gamesPlayed++;
+    if (won) s.gamesWon++;
+  });
+  recordWaveReached(level);
+  flushStats();
   let newBest = false;
   if (summary) {
     rewards.addPoints(summary.total);
@@ -226,6 +256,51 @@ export function devSetAllDiscovered(unlocked: boolean): void {
         }
       : { enemies: [], towers: [] },
   );
+}
+
+// ---- Career records ---------------------------------------------------------------------------
+// Counters change many times a second during play, so they're kept in memory and only written (and
+// published to the store) by `flushStats`, at save points and when a game ends.
+
+const copyStats = (s: CareerStats): CareerStats => ({ ...s, kills: [...s.kills] });
+
+const liveStats = copyStats(profileStore.get().stats);
+let statsDirty = false;
+
+function updateStats(change: (s: CareerStats) => void): void {
+  change(liveStats);
+  statsDirty = true;
+}
+
+export function recordKill(type: EnemyType): void {
+  updateStats((s) => {
+    s.kills[type] = (s.kills[type] ?? 0) + 1;
+  });
+}
+
+export function recordTowerBuilt(): void {
+  updateStats((s) => {
+    s.towersBuilt++;
+  });
+}
+
+export function recordWaveReached(level: number): void {
+  if (level > liveStats.highestWave) {
+    updateStats((s) => {
+      s.highestWave = level;
+    });
+  }
+}
+
+/** Saves pending career record changes. */
+export function flushStats(): void {
+  if (!statsDirty) {
+    return;
+  }
+  statsDirty = false;
+  const stats = copyStats(liveStats);
+  writeJSON(Keys.stats, stats);
+  profileStore.set({ stats });
 }
 
 // ---- Quick save --------------------------------------------------------------------------------
