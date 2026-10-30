@@ -80,7 +80,7 @@ export const LEVEL_SOURCES: Record<LevelImageId, number> = {
   threeway_level: require('@/assets/levels/threeway_level.jpg'),
 };
 
-/** Robot portraits from the original title screen. */
+/** Robot portraits for the title screen (rendered by tools/sprites/titles.py). */
 export const TITLE_SOURCES: number[] = [
   require('@/assets/title/title1_nobg.png'),
   require('@/assets/title/title2_nobg.png'),

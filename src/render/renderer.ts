@@ -10,7 +10,7 @@ import { BlendMode, PaintStyle, Skia } from '@shopify/react-native-skia';
 import { GRID, GRID_HALF, SUB_SHIFT } from '@/engine/constants';
 import { PROJECTILES } from '@/engine/data/projectiles';
 import type { SpriteId } from '@/engine/data/sprites';
-import { SPRITES } from '@/engine/data/sprites';
+import { frameRect, SPRITES } from '@/engine/data/sprites';
 import { EXPLOSION_SPRITES } from '@/engine/effects';
 import { ENEMIES, enemyDeathFrames, enemyFrame } from '@/engine/enemies';
 import type { Enemy, Tower } from '@/engine/entities';
@@ -124,12 +124,12 @@ export class WorldRenderer {
     canvas.translate(camera.offsetX, camera.offsetY);
     canvas.scale(camera.scale, camera.scale);
 
-    // Map background (authored at the simulation's grid size, so drawn 1:1).
+    // Map background (rendered at a higher resolution than the world, so scaled to fit it).
     const bg = images.level;
     canvas.drawImageRect(
       bg,
       Skia.XYWHRect(0, 0, bg.width(), bg.height()),
-      Skia.XYWHRect(0, 0, bg.width(), bg.height()),
+      Skia.XYWHRect(0, 0, mapW, mapH),
       this.spritePaint,
     );
     canvas.restore();
@@ -201,9 +201,10 @@ export class WorldRenderer {
     ) {
       return;
     }
+    const src = frameRect(sheet, frame);
     canvas.drawImageRect(
       sprites[id],
-      Skia.XYWHRect(frame * sheet.frameWidth, 0, sheet.frameWidth, sheet.frameHeight),
+      Skia.XYWHRect(src.x, src.y, src.width, src.height),
       Skia.XYWHRect(x, y, sheet.frameWidth, sheet.frameHeight),
       paint,
     );
