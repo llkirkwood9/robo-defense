@@ -107,7 +107,14 @@ export function GlassSurface({
   );
 }
 
-/** Groups glass surfaces so they blend into each other when close (iOS 26). */
+/**
+ * Groups glass surfaces so they blend into each other when close (iOS 26).
+ *
+ * Never fade a group (or any of its parents) in from transparent: the native container applies
+ * its glass once when mounted, and iOS silently skips it while the view is invisible, leaving the
+ * buttons inside without a background until the screen is shown again. Slide or scale it in
+ * instead (`GlassSurface` on its own waits until it's visible, so it can fade).
+ */
 export function GlassGroup({
   children,
   spacing = 8,

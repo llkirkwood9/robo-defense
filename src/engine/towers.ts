@@ -36,9 +36,53 @@ export enum TowerType {
   MineUnarmed = 20,
   MineArmed = 21,
   Flare = 22,
+  /** Not in the original: sets targeting for every tower and boosts nearby towers' range. */
+  Command = 23,
 }
 
-export const TOWER_TYPE_COUNT = 23;
+export const TOWER_TYPE_COUNT = 24;
+
+/** How a tower picks its target. Without a Command Tower every tower uses `First`. */
+export enum TargetMode {
+  /** The robot that entered the map earliest (the original behaviour, kept until it leaves). */
+  First = 0,
+  /** The robot that entered the map most recently. */
+  Last = 1,
+  Closest = 2,
+  /** Most hit points remaining. */
+  Strongest = 3,
+  /** Fewest hit points remaining. */
+  Weakest = 4,
+}
+
+export const TARGET_MODES = [
+  TargetMode.First,
+  TargetMode.Last,
+  TargetMode.Closest,
+  TargetMode.Strongest,
+  TargetMode.Weakest,
+] as const;
+
+export const TARGET_MODE_LABELS: Record<TargetMode, string> = {
+  [TargetMode.First]: 'First',
+  [TargetMode.Last]: 'Last',
+  [TargetMode.Closest]: 'Closest',
+  [TargetMode.Strongest]: 'Strongest',
+  [TargetMode.Weakest]: 'Weakest',
+};
+
+export const TARGET_MODE_HINTS: Record<TargetMode, string> = {
+  [TargetMode.First]: 'The robot that entered the map first',
+  [TargetMode.Last]: 'The robot that entered the map last',
+  [TargetMode.Closest]: 'The nearest robot in range',
+  [TargetMode.Strongest]: 'The robot with the most hit points',
+  [TargetMode.Weakest]: 'The robot with the fewest hit points',
+};
+
+/** Towers within this many tiles of the Command Tower get its range boost. */
+export const COMMAND_AURA_TILES = 2.5;
+/** Range multiplier for towers inside the Command Tower's aura. */
+export const COMMAND_RANGE_BONUS = 1.15;
 /** Towers that can be dragged out of the build dock, in dock order. */
 export const BUILDABLE_TOWERS = [TowerType.Gun1, TowerType.Rocket1, TowerType.Slow1] as const;
 
@@ -142,7 +186,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
   define(TowerType.Gun2, 'Medium Gun', 'gun_tower2', {
     shotType: ShotType.Bullet,
     downgrade: TowerType.Gun1,
-    upgrades: [TowerType.Gun3, -1, -1],
+    upgrades: [TowerType.Gun3, has(Reward.CommandTowerUnlocked) ? TowerType.Command : -1, -1],
     cost: 4,
     shotDelay: 6,
     radius: 18,
@@ -157,6 +201,16 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     radius: 18,
     power: r.apply(3, Reward.BulletUpgrade),
     notes: [bulletNote, null],
+  });
+
+  // Command Tower: no weapon; its range is the aura that boosts nearby towers. The turret (a
+  // spinning radar) is drawn lower in its frame than other towers', hence the taller height.
+  define(TowerType.Command, 'Command Tower', 'command_tower', {
+    downgrade: TowerType.Gun2,
+    cost: 100,
+    animated: true,
+    radius: COMMAND_AURA_TILES * 10,
+    towerHeight: Math.trunc((GRID * 3) / 8) + 5,
   });
 
   // Antiair guns.
@@ -451,6 +505,19 @@ function applyTowerMix(t: TowerProps[], seed: number) {
       }
     }
   }
+}
+
+/**
+ * Whether a tower's fire rate is worth showing. Teleporters and mines technically fire every tick
+ * while armed, but each only triggers once before it needs re-arming.
+ */
+export function hasFireRate(p: TowerProps): boolean {
+  return (
+    p.shotType !== ShotType.None &&
+    p.shotType !== ShotType.Teleport &&
+    p.shotType !== ShotType.Mine &&
+    p.shotDelay < 1000
+  );
 }
 
 /** Which enemies a tower can attack. */

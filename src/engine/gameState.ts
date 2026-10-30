@@ -22,7 +22,7 @@ import { fastRandomInt } from './random';
 import type { RewardLevels } from './rewards';
 import { Reward } from './rewards';
 import type { TowerTable } from './towers';
-import { TowerType } from './towers';
+import { COMMAND_AURA_TILES, TargetMode, TOWER_TYPE_COUNT, TowerType } from './towers';
 import type { WaveCursor } from './waves';
 import { generateWaves, survivalDifficulty, WaveRunner } from './waves';
 
@@ -98,7 +98,16 @@ export interface SavedGame {
   flags: AchievementFlags;
   towerCount: number;
   fastForwardCount: number;
-  towers: { x: number; y: number; type: TowerType; shotDelay: number }[];
+  towers: {
+    x: number;
+    y: number;
+    type: TowerType;
+    shotDelay: number;
+    /** Per-tower targeting override (added with the Command Tower; absent in older saves). */
+    targetMode?: TargetMode | null;
+  }[];
+  /** Command Tower default targeting (absent in older saves). */
+  targetMode?: TargetMode;
   enemies: EnemyState[];
 }
 
@@ -143,6 +152,10 @@ export class GameState implements World {
   /** Dead enemies still fading out. */
   graveyard: Enemy[] = [];
   towers: Tower[] = [];
+  /** Default targeting chosen on any Command Tower (shared by all of them). */
+  targetMode = TargetMode.First;
+  /** The Command Towers on the map. */
+  commandTowers: Tower[] = [];
   bullets: Bullet[] = [];
   particles: Particle[] = [];
   explosions: Explosion[] = [];
@@ -201,7 +214,12 @@ export class GameState implements World {
   }
 
   towerChanged(): void {
+    this.refreshCommand();
     this.services.emit({ type: 'towersChanged' });
+  }
+
+  get commandActive(): boolean {
+    return this.commandTowers.length > 0;
   }
 
   shotFired(type: ShotType): void {
@@ -257,6 +275,8 @@ export class GameState implements World {
     this.enemies = [];
     this.graveyard = [];
     this.towers = [];
+    this.commandTowers = [];
+    this.targetMode = TargetMode.First;
     this.bullets = [];
     this.particles = [];
     this.explosions = [];
@@ -450,8 +470,47 @@ export class GameState implements World {
     this.towersChanged();
   }
 
+  // ---- Command Tower --------------------------------------------------------------------------
+
+  /** Sets the default targeting for every tower without its own setting. */
+  setTargetMode(mode: TargetMode): void {
+    this.targetMode = mode;
+  }
+
+  /** Sets (or, with null, clears) a tower's own targeting. */
+  setTowerTargetMode(tower: Tower, mode: TargetMode | null): void {
+    tower.targetMode = mode;
+  }
+
+  /** Clears every tower's own targeting so they all follow the Command Towers. */
+  clearTargetOverrides(): void {
+    for (const t of this.towers) {
+      t.targetMode = null;
+    }
+  }
+
+  /**
+   * Finds the Command Towers and marks the towers inside any of their auras. Auras don't stack: a
+   * tower near several Command Towers gets the same boost as one near a single tower.
+   */
+  private refreshCommand(): void {
+    const commands = this.towers.filter((t) => t.type === TowerType.Command);
+    this.commandTowers = commands;
+    const reachSq = COMMAND_AURA_TILES * COMMAND_AURA_TILES;
+    for (const t of this.towers) {
+      t.boosted =
+        t.type !== TowerType.Command &&
+        commands.some((c) => {
+          const dx = t.gridX - c.gridX;
+          const dy = t.gridY - c.gridY;
+          return dx * dx + dy * dy <= reachSq;
+        });
+    }
+  }
+
   /** Recomputes enemy paths after the set of blocking towers changed. */
   private towersChanged(): void {
+    this.refreshCommand();
     this.services.emit({ type: 'towersChanged' });
     for (const g of this.grids) {
       g.calcPaths(this.towers);
@@ -819,7 +878,9 @@ export class GameState implements World {
         y: t.gridY,
         type: t.type,
         shotDelay: t.shotDelay,
+        targetMode: t.targetMode,
       })),
+      targetMode: this.targetMode,
       enemies: this.enemies.map((e) => ({
         gridX: e.gridX,
         gridY: e.gridY,
@@ -863,12 +924,14 @@ export class GameState implements World {
     this.flags = { ...save.flags };
     this.towerCount = save.towerCount;
     this.fastForwardCount = save.fastForwardCount;
+    this.targetMode = save.targetMode ?? TargetMode.First;
     for (const t of save.towers) {
-      if (!inMap(t.x, t.y) || t.type < TowerType.Gun1 || t.type > TowerType.Flare) {
+      if (!inMap(t.x, t.y) || t.type < TowerType.Gun1 || t.type >= TOWER_TYPE_COUNT) {
         throw new Error('Corrupt save: invalid tower');
       }
       const tower = new Tower(t.x, t.y, t.type, this.towerTable, this.tick);
       tower.shotDelay = t.shotDelay;
+      tower.targetMode = t.targetMode ?? null;
       this.towers.push(tower);
     }
     for (const e of save.enemies) {

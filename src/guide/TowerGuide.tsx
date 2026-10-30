@@ -1,14 +1,15 @@
 /**
  * Tower guide: every tower's sprite and stats, including the player's upgrades. Towers stay
- * locked (an outline only) until they are first built or upgraded to in a game.
+ * locked (an outline only) until they are first built or upgraded to in a game. Teleporters and
+ * mines, which are bought unarmed and then armed, get one card each.
  */
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { GRID, TICKS_PER_SECOND } from '@/engine/constants';
-import { ShotType } from '@/engine/data/projectiles';
-import { TowerTable, TowerType } from '@/engine/towers';
-import type { TowerTargets } from '@/engine/towers';
+import { MINE_RADIUS_SQ, ShotType } from '@/engine/data/projectiles';
+import { hasFireRate, TowerTable, TowerType } from '@/engine/towers';
+import type { TowerProps, TowerTargets } from '@/engine/towers';
 import { useStore } from '@/lib/store';
 import { profileStore, rewards } from '@/services/profile';
 import { GlassSurface } from '@/ui/Glass';
@@ -19,36 +20,59 @@ import { Stat } from '@/ui/Stat';
 import { Text } from '@/ui/Text';
 import { colors, radii, spacing } from '@/ui/theme';
 
+import type { Clock } from './clock';
+import { useClock } from './clock';
+
+/** A guide card: one tower, or an unarmed tower and its armed form together. */
+interface Entry {
+  type: TowerType;
+  /** The armed form, for towers that are armed after building (and re-armed after each use). */
+  armed?: TowerType;
+  /** Card title, when it differs from the tower's own label. */
+  name?: string;
+}
+
 /** Grouped by family, each in upgrade order. */
-const ORDER: TowerType[] = [
-  TowerType.Gun1,
-  TowerType.Gun2,
-  TowerType.Gun3,
-  TowerType.Antiair1,
-  TowerType.Antiair2,
-  TowerType.Flame1,
-  TowerType.Flame2,
-  TowerType.Rocket1,
-  TowerType.Rocket2,
-  TowerType.Rocket3,
-  TowerType.SurfaceAir1,
-  TowerType.SurfaceAir2,
-  TowerType.Mortar,
-  TowerType.Artillery,
-  TowerType.Slow1,
-  TowerType.Slow2,
-  TowerType.Slow3,
-  TowerType.TeleportUnarmed,
-  TowerType.TeleportArmed,
-  TowerType.MineUnarmed,
-  TowerType.MineArmed,
-  TowerType.Flare,
+const ORDER: Entry[] = [
+  { type: TowerType.Gun1 },
+  { type: TowerType.Gun2 },
+  { type: TowerType.Gun3 },
+  { type: TowerType.Command },
+  { type: TowerType.Antiair1 },
+  { type: TowerType.Antiair2 },
+  { type: TowerType.Flame1 },
+  { type: TowerType.Flame2 },
+  { type: TowerType.Rocket1 },
+  { type: TowerType.Rocket2 },
+  { type: TowerType.Rocket3 },
+  { type: TowerType.SurfaceAir1 },
+  { type: TowerType.SurfaceAir2 },
+  { type: TowerType.Mortar },
+  { type: TowerType.Artillery },
+  { type: TowerType.Slow1 },
+  { type: TowerType.Slow2 },
+  { type: TowerType.Slow3 },
+  { type: TowerType.TeleportUnarmed, armed: TowerType.TeleportArmed, name: 'Teleport Tower' },
+  { type: TowerType.MineUnarmed, armed: TowerType.MineArmed, name: 'Mine' },
+  { type: TowerType.Flare },
 ];
+
+/** A tower's name in the guide (its card title, so unarmed variants read as "Mine"). */
+const nameOf = (type: TowerType, table: TowerTable) =>
+  ORDER.find((e) => e.type === type || e.armed === type)?.name ?? table.get(type).label;
+
+const isUnlocked = (entry: Entry, bought: readonly TowerType[]) =>
+  bought.includes(entry.type) || (entry.armed !== undefined && bought.includes(entry.armed));
+
+/** Mine blast radius in tiles. */
+const MINE_BLAST_TILES = Math.sqrt(MINE_RADIUS_SQ) / GRID;
 
 const BLURBS: Partial<Record<TowerType, string>> = {
   [TowerType.Gun1]: 'A cheap, quick-firing gun. The backbone of most mazes.',
   [TowerType.Gun2]: 'Double the punch of the Basic Gun for a few dollars more.',
   [TowerType.Gun3]: 'Heavy rounds that start to get through armor.',
+  [TowerType.Command]:
+    'Unarmed, but it lets you choose how every tower picks targets (first, last, closest, strongest or weakest), for all towers or one at a time. Nearby towers get extra range; build several to cover more of the map (boosts do not stack).',
   [TowerType.Antiair1]: 'Rapid flak cannon that only fires at aircraft.',
   [TowerType.Antiair2]: 'Hard-hitting flak for the toughest aircraft.',
   [TowerType.Flame1]: 'Sets ground robots alight, spreading the fire through a crowd.',
@@ -63,21 +87,19 @@ const BLURBS: Partial<Record<TowerType, string>> = {
   [TowerType.Slow1]: 'Slows robots down so your other towers get more shots.',
   [TowerType.Slow2]: 'Slows robots more often and for longer.',
   [TowerType.Slow3]: 'The strongest, fastest-cycling slow tower.',
-  [TowerType.TeleportUnarmed]: 'Sits on the path. Arm it to start teleporting.',
-  [TowerType.TeleportArmed]:
-    'Sends the next robot to cross it back to the start, then needs arming again.',
-  [TowerType.MineUnarmed]: 'Buried in the path. Arm it to make it explode.',
-  [TowerType.MineArmed]: 'Explodes when a robot crosses it, setting off neighbouring mines too.',
+  [TowerType.TeleportUnarmed]:
+    'Built on the path, then armed. Sends the first robot to reach it back to the start, then needs re-arming.',
+  [TowerType.MineUnarmed]:
+    'Buried in the path, then armed. Blows up the first robot to reach it and anything nearby, setting off neighbouring armed mines too. Re-arm it after each blast.',
   [TowerType.Flare]: 'A burning flare on the path that sets passing robots alight.',
 };
 
 /** Towers that must first be unlocked with upgrade points. */
 const REWARD_TOWERS = new Set([
   TowerType.TeleportUnarmed,
-  TowerType.TeleportArmed,
   TowerType.MineUnarmed,
-  TowerType.MineArmed,
   TowerType.Flare,
+  TowerType.Command,
 ]);
 
 const TARGET_LABELS: Record<TowerTargets, string> = {
@@ -89,25 +111,34 @@ const TARGET_LABELS: Record<TowerTargets, string> = {
 const ICON_SIZE = 64;
 const ICON_BOX = 96;
 
-function TowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
+/** An animated tower cycling its frames at the in-game speed (one frame every other tick). */
+function AnimatedTowerIcon({ props }: { props: TowerProps }) {
+  const { directions } = props;
+  const frame = useClock(useCallback((c: Clock) => (c.tick >> 1) % directions, [directions]));
+  return <TowerIcon props={props} size={ICON_SIZE} animFrame={frame} />;
+}
+
+function TowerCard({ entry, table }: { entry: Entry; table: TowerTable }) {
+  const { type, armed } = entry;
+  // Building stats come from the tower as bought; attack stats from its armed form, if any.
   const p = table.get(type);
-  const targets = table.targets(type);
+  const a = table.get(armed ?? type);
+  const targets = table.targets(armed ?? type);
   const target = targets && TARGET_LABELS[targets];
-  const notes = p.notes.filter((n): n is string => !!n);
-  const fires = p.shotType !== ShotType.None && p.shotDelay < 1000;
-  const rate = TICKS_PER_SECOND / p.shotDelay;
+  const notes = a.notes.filter((n): n is string => !!n);
+  const rate = TICKS_PER_SECOND / a.shotDelay;
   const blurb = BLURBS[type] ?? '';
   const { downgrade } = p;
-  const from = downgrade === -1 ? null : table.get(downgrade);
+  const from = downgrade === -1 ? null : nameOf(downgrade, table);
   return (
     <GlassSurface radius={radii.md} style={styles.card}>
       <View style={styles.iconBox}>
-        <TowerIcon props={p} size={ICON_SIZE} />
+        {a.animated ? <AnimatedTowerIcon props={a} /> : <TowerIcon props={a} size={ICON_SIZE} />}
       </View>
       <View style={styles.cardBody}>
         <View style={styles.titleRow}>
           <Text variant="heading" style={styles.flex}>
-            {p.label}
+            {entry.name ?? p.label}
           </Text>
           {target && (
             <View style={[styles.tag, target === 'Air' && styles.tagAir]}>
@@ -119,7 +150,7 @@ function TowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
           )}
         </View>
         <Text variant="caption" color={colors.accent}>
-          {from ? `Upgrade from ${from.label}` : 'Built from the dock'}
+          {from ? `Upgrade from ${from}` : 'Built from the dock'}
         </Text>
         <View style={styles.stats}>
           <Stat
@@ -128,10 +159,13 @@ function TowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
             value={`$${p.cost}`}
             label={from ? 'upgrade' : 'cost'}
           />
-          {p.power > 0 && (
-            <Stat icon="bolt" color={colors.danger} value={String(p.power)} label="power" />
+          {armed !== undefined && (
+            <Stat icon="money" color={colors.gold} value={`$${a.cost}`} label="to arm" />
           )}
-          {fires && (
+          {a.power > 0 && (
+            <Stat icon="bolt" color={colors.danger} value={String(a.power)} label="power" />
+          )}
+          {hasFireRate(a) && (
             <Stat
               icon="timer"
               color={colors.success}
@@ -139,12 +173,20 @@ function TowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
               label="shots/s"
             />
           )}
-          {p.attackRadius > GRID / 5 && (
+          {a.attackRadius > GRID / 5 && (
             <Stat
               icon="range"
               color={colors.accent}
-              value={(p.attackRadius / GRID).toFixed(1)}
-              label="range"
+              value={(a.attackRadius / GRID).toFixed(1)}
+              label={type === TowerType.Command ? 'aura' : 'range'}
+            />
+          )}
+          {a.shotType === ShotType.Mine && (
+            <Stat
+              icon="range"
+              color={colors.accent}
+              value={MINE_BLAST_TILES.toFixed(1)}
+              label="blast"
             />
           )}
         </View>
@@ -162,17 +204,18 @@ function TowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
   );
 }
 
-function LockedTowerCard({ type, table }: { type: TowerType; table: TowerTable }) {
+function LockedTowerCard({ entry, table }: { entry: Entry; table: TowerTable }) {
+  const props = table.get(entry.armed ?? entry.type);
   return (
     <GlassSurface radius={radii.md} style={styles.card}>
       <View style={styles.iconBox}>
         <SpriteOutline
-          render={(tint) => <TowerIcon props={table.get(type)} size={ICON_SIZE} tintColor={tint} />}
+          render={(tint) => <TowerIcon props={props} size={ICON_SIZE} tintColor={tint} />}
         />
       </View>
       <LockedLabel
         hint={
-          REWARD_TOWERS.has(type)
+          REWARD_TOWERS.has(entry.type)
             ? 'Unlock it in Upgrades, then buy one in a game.'
             : 'Buy this tower in a game to unlock it.'
         }
@@ -192,7 +235,7 @@ export function TowerGuide() {
   // Rebuilt when reward upgrades change, since they buff tower stats.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const table = useMemo(() => new TowerTable(rewards), [rewardsVersion]);
-  const unlocked = ORDER.filter((t) => bought.includes(t)).length;
+  const unlocked = ORDER.filter((entry) => isUnlocked(entry, bought)).length;
 
   return (
     <>
@@ -208,11 +251,11 @@ export function TowerGuide() {
       </GlassSurface>
 
       <View style={styles.grid}>
-        {ORDER.map((type) =>
-          bought.includes(type) ? (
-            <TowerCard key={type} type={type} table={table} />
+        {ORDER.map((entry) =>
+          isUnlocked(entry, bought) ? (
+            <TowerCard key={entry.type} entry={entry} table={table} />
           ) : (
-            <LockedTowerCard key={type} type={type} table={table} />
+            <LockedTowerCard key={entry.type} entry={entry} table={table} />
           ),
         )}
       </View>

@@ -26,6 +26,7 @@ export const SPRITES = {
   aa_tower: squares(70, 33),
   aa_tower2: squares(70, 33),
   artillery: squares(70, 2),
+  command_tower: squares(70, 33),
   flame_tower: squares(70, 33),
   flame_tower2: squares(70, 33),
   flare: squares(70, 1),

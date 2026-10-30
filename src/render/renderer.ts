@@ -407,7 +407,8 @@ export class WorldRenderer {
     const y = cellY * GRID;
 
     if (valid && showRange) {
-      const r = props.attackRadius;
+      // A placed tower's range includes any Command Tower boost.
+      const r = !ghost && selected ? selected.attackRadius : props.attackRadius;
       this.paint.setColor(RANGE_FILL);
       canvas.drawCircle(x + GRID_HALF, y + GRID_HALF, r, this.paint);
       this.strokePaint.setColor(RANGE_STROKE);

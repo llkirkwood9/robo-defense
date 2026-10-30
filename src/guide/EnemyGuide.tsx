@@ -4,7 +4,7 @@
  * until they first appear in a game.
  */
 import Slider from '@react-native-community/slider';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Dir, GRID_SUB, TICKS_PER_SECOND } from '@/engine/constants';
@@ -18,7 +18,7 @@ import {
 } from '@/engine/enemies';
 import { PERFECT_LEVELS_FOR_TITAN } from '@/engine/gameState';
 import { NUM_LEVELS } from '@/engine/waves';
-import { createStore, useStore } from '@/lib/store';
+import { useStore } from '@/lib/store';
 import { maxDifficulty, profileStore } from '@/services/profile';
 import { GlassSurface } from '@/ui/Glass';
 import { GlassButton } from '@/ui/GlassButton';
@@ -28,6 +28,8 @@ import { SpriteFrame } from '@/ui/Sprite';
 import { Stat } from '@/ui/Stat';
 import { Text } from '@/ui/Text';
 import { colors, radii, spacing } from '@/ui/theme';
+
+import { useClock } from './clock';
 
 const BLURBS: Record<EnemyType, string> = {
   [EnemyType.Soldier]: 'Basic infantry. Weak alone, but they come in numbers.',
@@ -68,32 +70,6 @@ function EnemyFrame({
   const sheet = SPRITES[p.sprite];
   const width = Math.min(SPRITE_BOX, (SPRITE_BOX * sheet.frameWidth) / sheet.frameHeight);
   return <SpriteFrame sprite={p.sprite} frame={frame} width={width} tintColor={tintColor} />;
-}
-
-/**
- * One animation clock shared by every sprite on the page (rather than a timer per card). It only
- * runs while at least one animated sprite is mounted.
- */
-const clock = createStore({ tick: 0 });
-let clockTimer: ReturnType<typeof setInterval> | null = null;
-let clockUsers = 0;
-
-function useClock<T>(selector: (c: { tick: number }) => T): T {
-  useEffect(() => {
-    if (clockUsers++ === 0) {
-      clockTimer = setInterval(
-        () => clock.set((c) => ({ tick: c.tick + 1 })),
-        1000 / TICKS_PER_SECOND,
-      );
-    }
-    return () => {
-      if (--clockUsers === 0 && clockTimer !== null) {
-        clearInterval(clockTimer);
-        clockTimer = null;
-      }
-    };
-  }, []);
-  return useStore(clock, selector);
 }
 
 /** The enemy walking (or flying) towards the viewer, animated at the game's tick rate. */

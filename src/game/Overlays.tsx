@@ -13,6 +13,7 @@ import Animated, {
   FadeOut,
   FadeOutRight,
   FadeOutUp,
+  ZoomIn,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -36,13 +37,14 @@ const selectMessages = (f: FeedState) => f.messages;
 const selectAchievements = (f: FeedState) => f.achievements;
 const selectBanner = (f: FeedState) => f.levelBanner;
 
+/**
+ * Dimmed full-screen backdrop for cards. Only the shade fades in, not the content: a `GlassGroup`
+ * created while transparent loses its glass on iOS (see `GlassGroup`). Fading out is safe.
+ */
 function Scrim({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) {
   return (
-    <Animated.View
-      entering={FadeIn.duration(200)}
-      exiting={FadeOut.duration(200)}
-      style={styles.scrim}
-    >
+    <Animated.View exiting={FadeOut.duration(200)} style={styles.scrim}>
+      <Animated.View entering={FadeIn.duration(200)} style={styles.shade} />
       {onPress && (
         <Pressable style={StyleSheet.absoluteFill} onPress={onPress} accessible={false} />
       )}
@@ -105,6 +107,9 @@ export function StartCard({ controller }: { controller: GameController }) {
 
 // ---- Pause ------------------------------------------------------------------------------------
 
+/** Zooms in rather than fading, since the menu buttons sit in a `GlassGroup`. */
+const PAUSE_ENTERING = ZoomIn.duration(180);
+
 export function PauseMenu({
   controller,
   onOptions,
@@ -127,7 +132,7 @@ export function PauseMenu({
   }
   return (
     <Scrim>
-      <Animated.View entering={FadeIn.duration(180)}>
+      <Animated.View entering={PAUSE_ENTERING}>
         <GlassSurface radius={radii.lg} style={[styles.card, styles.menuCard]}>
           <Text variant="title" style={styles.center}>
             Paused
@@ -509,9 +514,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: colors.scrim,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  shade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.scrim,
   },
   card: {
     width: 460,

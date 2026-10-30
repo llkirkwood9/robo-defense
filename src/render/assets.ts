@@ -13,6 +13,7 @@ export const SPRITE_SOURCES: Record<SpriteId, number> = {
   bomber: require('@/assets/sprites/bomber.png'),
   bullet_large: require('@/assets/sprites/bullet_large.png'),
   bullet_small: require('@/assets/sprites/bullet_small.png'),
+  command_tower: require('@/assets/sprites/command_tower.png'),
   courtyard_ne_overlay: require('@/assets/sprites/courtyard_ne_overlay.png'),
   courtyard_nw_overlay: require('@/assets/sprites/courtyard_nw_overlay.png'),
   courtyard_se_overlay: require('@/assets/sprites/courtyard_se_overlay.png'),

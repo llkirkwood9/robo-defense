@@ -26,6 +26,7 @@ import { GameState } from '@/engine/gameState';
 import { MAP_NAMES } from '@/engine/maps';
 import { Reward } from '@/engine/rewards';
 import { TowerTable, TowerType } from '@/engine/towers';
+import type { TargetMode } from '@/engine/towers';
 import { createStore } from '@/lib/store';
 import { Camera } from '@/render/camera';
 import type { ViewPadding } from '@/render/camera';
@@ -510,6 +511,31 @@ export class GameController {
     }
     this.closeUpgradePanel();
     this.syncHud();
+  }
+
+  // ---- Command Tower targeting ---------------------------------------------------------------
+
+  /** Sets the Command Tower's default targeting for all towers. */
+  setTargetMode(mode: TargetMode): void {
+    this.state.setTargetMode(mode);
+    this.targetingChanged();
+  }
+
+  /** Sets (or, with null, clears) one tower's own targeting. */
+  setTowerTargetMode(tower: Tower, mode: TargetMode | null): void {
+    this.state.setTowerTargetMode(tower, mode);
+    this.targetingChanged();
+  }
+
+  /** Makes every tower follow the Command Tower's default again. */
+  clearTargetOverrides(): void {
+    this.state.clearTargetOverrides();
+    this.targetingChanged();
+  }
+
+  private targetingChanged(): void {
+    haptics.selection();
+    this.hud.set((h) => ({ towerVersion: h.towerVersion + 1 }));
   }
 
   // ---- Tower placement ----------------------------------------------------------------------

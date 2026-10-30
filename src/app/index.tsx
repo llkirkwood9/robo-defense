@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
+import Animated, { FadeInDown, SlideInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { LevelImageId } from '@/engine/data/sprites';
@@ -34,6 +34,13 @@ const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)]
 const selectPoints = (s: ReturnType<typeof profileStore.get>) => s.rewardPoints;
 const selectAchievements = (s: ReturnType<typeof profileStore.get>) => s.achievementCount;
 const selectHasSave = (s: ReturnType<typeof profileStore.get>) => s.hasQuickSave;
+
+/**
+ * The menu slides in without fading: its buttons sit in a `GlassGroup`, whose glass iOS skips if
+ * the group is created while transparent. (A built-in animation, not a custom `Keyframe`: on web,
+ * Reanimated leaves keyframe-animated views absolutely positioned with no size.)
+ */
+const MENU_ENTERING = SlideInRight.delay(200).duration(600);
 
 export default function TitleScreen() {
   const [backdrop] = useState(() => pick(BACKDROPS));
@@ -108,7 +115,7 @@ export default function TitleScreen() {
           </Animated.View>
         </View>
 
-        <Animated.View entering={FadeInRight.delay(200).duration(600)} style={styles.menuColumn}>
+        <Animated.View entering={MENU_ENTERING} style={styles.menuColumn}>
           <ScrollView
             contentContainerStyle={styles.menuScroll}
             showsVerticalScrollIndicator={false}

@@ -51,15 +51,20 @@ export function SpriteFrame({
   );
 }
 
-/** A tower icon: base plus turret facing down, as on the original build buttons. */
+/**
+ * A tower icon: base plus turret facing down, as on the original build buttons. Animated towers
+ * (slow towers, armed teleporters and mines) show animation frame `animFrame`.
+ */
 export function TowerIcon({
   props,
   size,
   tintColor,
+  animFrame = 0,
 }: {
   props: TowerProps;
   size: number;
   tintColor?: string;
+  animFrame?: number;
 }) {
   if (!props.sprite) {
     return <View style={{ width: size, height: size }} />;
@@ -70,7 +75,7 @@ export function TowerIcon({
     props.directions === 0
       ? -1
       : props.animated
-        ? 1
+        ? (animFrame % props.directions) + 1
         : Math.trunc((props.directions * 270) / 360) + 1;
   return (
     <View style={{ width: size, height: size + turretOffset }}>

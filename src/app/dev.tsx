@@ -151,7 +151,9 @@ export default function DevScreen() {
           label="Lock all"
           size="sm"
           tone="danger"
-          onPress={() => confirmReset('the enemy and tower guides', () => devSetAllDiscovered(false))}
+          onPress={() =>
+            confirmReset('the enemy and tower guides', () => devSetAllDiscovered(false))
+          }
         />
       </Section>
 

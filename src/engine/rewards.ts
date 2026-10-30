@@ -32,6 +32,8 @@ export enum Reward {
   FlareTowerUnlocked = 22,
   /** Not in the original: wave banners preview the coming robots. */
   WaveIntel = 23,
+  /** Not in the original: the Command Tower, which sets how towers choose targets. */
+  CommandTowerUnlocked = 24,
 }
 
 /** How a reward's level changes the value it is applied to. */
@@ -184,6 +186,11 @@ const REWARD_DEFS: readonly RewardDef[] = [
     ...unlock('WAVE_INTEL', 'Wave Intel', 'Wave banners preview the robots coming in each wave'),
     fixedCost: 100000,
   },
+  unlock(
+    'COMMAND_TOWER_UPGRADED',
+    'Unlock Command Tower',
+    'Upgrade a Medium Gun into a Command Tower to choose how your towers pick targets',
+  ),
 ];
 
 export const REWARD_COUNT = REWARD_DEFS.length;

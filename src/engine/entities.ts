@@ -24,7 +24,7 @@ import { fastRandomInt } from './random';
 import type { RewardLevels } from './rewards';
 import { Reward } from './rewards';
 import type { TowerTable } from './towers';
-import { TowerType } from './towers';
+import { COMMAND_RANGE_BONUS, TargetMode, TowerType } from './towers';
 import type { Vec } from './vector';
 import { arctan, scaleVector, vectorAngle } from './vector';
 
@@ -37,6 +37,10 @@ export interface World {
   readonly bullets: readonly Bullet[];
   readonly towerTable: TowerTable;
   readonly rewards: RewardLevels;
+  /** Whether a Command Tower is on the map (enables custom targeting). */
+  readonly commandActive: boolean;
+  /** Default targeting set on the Command Tower. */
+  readonly targetMode: TargetMode;
   readonly achievements: AchievementSink;
   /** Number of live particle/explosion effects (used to throttle smoke). */
   readonly effectCount: number;
@@ -335,6 +339,10 @@ export class Tower {
   shotDelay = 0;
   activeEnemy: Enemy | null = null;
   firstState = 0;
+  /** This tower's own targeting, overriding the Command Tower's default; null to follow it. */
+  targetMode: TargetMode | null = null;
+  /** Inside a Command Tower's aura (longer range). */
+  boosted = false;
 
   constructor(
     readonly gridX: number,
@@ -352,6 +360,16 @@ export class Tower {
 
   get blocking(): boolean {
     return this.props.blocking;
+  }
+
+  /** Attack radius including any Command Tower boost. */
+  get attackRadius(): number {
+    return this.props.attackRadius * (this.boosted ? COMMAND_RANGE_BONUS : 1);
+  }
+
+  /** The targeting this tower actually uses. */
+  effectiveTargetMode(world: World): TargetMode {
+    return world.commandActive ? (this.targetMode ?? world.targetMode) : TargetMode.First;
   }
 
   /** (Re)initialises the tower after placement or an upgrade. */
@@ -417,16 +435,67 @@ export class Tower {
   }
 
   private chooseTarget(targets: readonly Enemy[], world: World): void {
-    if (this.isValidTarget(this.activeEnemy, world)) {
+    const mode = this.effectiveTargetMode(world);
+    if (mode === TargetMode.First) {
+      // The original rule: keep the current target while it's valid, else take the oldest.
+      if (this.isValidTarget(this.activeEnemy, world)) {
+        return;
+      }
+      this.activeEnemy = null;
+      let oldest = Number.MAX_SAFE_INTEGER;
+      for (const e of targets) {
+        if (this.isValidTarget(e, world) && e.firstState < oldest) {
+          this.activeEnemy = e;
+          oldest = e.firstState;
+        }
+      }
       return;
     }
+
+    // Other modes re-pick the best target for every shot.
     this.activeEnemy = null;
-    let oldest = Number.MAX_SAFE_INTEGER;
+    const spreadsFire =
+      this.props.shotType === ShotType.Fire || this.props.shotType === ShotType.SlowFire;
+    let best: Enemy | null = null;
+    let bestScore = 0;
+    let bestBurning = false;
     for (const e of targets) {
-      if (this.isValidTarget(e, world) && e.firstState < oldest) {
-        this.activeEnemy = e;
-        oldest = e.firstState;
+      if (!this.isValidTarget(e, world)) {
+        continue;
       }
+      const score = this.targetScore(e, mode);
+      // Fire towers still prefer robots that aren't burning yet.
+      const burning = spreadsFire && e.burning;
+      if (
+        best === null ||
+        (bestBurning && !burning) ||
+        (burning === bestBurning &&
+          (score > bestScore || (score === bestScore && e.firstState < best.firstState)))
+      ) {
+        best = e;
+        bestScore = score;
+        bestBurning = burning;
+      }
+    }
+    this.activeEnemy = best;
+  }
+
+  /** Higher is better for the given targeting mode. */
+  private targetScore(e: Enemy, mode: TargetMode): number {
+    switch (mode) {
+      case TargetMode.Last:
+        return e.firstState;
+      case TargetMode.Closest: {
+        const dx = this.gridX * GRID - e.pixelX;
+        const dy = this.gridY * GRID - e.pixelY;
+        return -(dx * dx + dy * dy);
+      }
+      case TargetMode.Strongest:
+        return e.health;
+      case TargetMode.Weakest:
+        return -e.health;
+      default:
+        return -e.firstState;
     }
   }
 
@@ -459,7 +528,10 @@ export class Tower {
     }
     const dx = this.gridX * GRID - e.pixelX;
     const dy = this.gridY * GRID - e.pixelY;
-    return dx * dx + dy * dy < this.props.attackRadiusSq;
+    const rangeSq = this.boosted
+      ? this.props.attackRadiusSq * COMMAND_RANGE_BONUS * COMMAND_RANGE_BONUS
+      : this.props.attackRadiusSq;
+    return dx * dx + dy * dy < rangeSq;
   }
 
   private teleport(world: World, enemy: Enemy): void {
