@@ -68,6 +68,9 @@ export const SPRITE_SOURCES: Record<SpriteId, number> = {
   titan: require('@/assets/sprites/titan.png'),
   truck: require('@/assets/sprites/truck.png'),
   uranium_bullet: require('@/assets/sprites/uranium_bullet.png'),
+  water_bottom_e: require('@/assets/sprites/water_bottom_e.png'),
+  water_bottom_w: require('@/assets/sprites/water_bottom_w.png'),
+  water_side: require('@/assets/sprites/water_side.png'),
 };
 
 export const LEVEL_SOURCES: Record<LevelImageId, number> = {

@@ -32,8 +32,8 @@ PORTRAITS = [
     (enemies.titan(0.2), 130, 118, 1.0),
     (enemies.truck(0), 64, 40, 1.0),
     (translate(enemies.helicopter(0.1), 0, 0, 0), 84, 44, 1.0),
-    (enemies.jet(), 76, 40, 1.0),
-    (enemies.bomber(), 84, 42, 1.0),
+    (enemies.jet(0.2), 76, 40, 1.0),
+    (enemies.bomber(0.1), 84, 42, 1.0),
 ]
 
 
@@ -51,8 +51,8 @@ def portrait(model, fw, oy, k, ss=3):
 
 
 def tower_hero():
-    base = towers.gun_base(3)
-    turret = translate(scaled(towers.gun_turret(3), 1.3), 0, 0, towers.DECK)
+    base = towers.recolor(towers.gun_base(3), towers.GUN_COLORS)
+    turret = translate(scaled(towers.recolor(towers.gun_turret(3), towers.GUN_COLORS), 1.3), 0, 0, towers.DECK)
 
     def scene(p):
         return base(p) + turret(p)

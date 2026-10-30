@@ -64,6 +64,8 @@ export interface Decoration {
   sprite: SpriteId;
   x: number;
   y: number;
+  /** Game ticks per animation frame; omitted for a still sprite (frame 0). */
+  frameTicks?: number;
 }
 
 /** World-pixel rectangle. */
@@ -152,6 +154,7 @@ interface StaticMap {
   obstacles?: number[];
   image: LevelImageId;
   scoreMultiplier: number;
+  underlays?: Decoration[];
   overlays?: Decoration[];
   starfield?: number[];
 }
@@ -164,6 +167,12 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     ends: [262],
     image: 'basic_level',
     scoreMultiplier: 100,
+    // Animated water along the bottom and lower-left edges of the background art.
+    underlays: [
+      { sprite: 'water_bottom_w', x: 0, y: GRID * 11 + 35, frameTicks: 5 },
+      { sprite: 'water_bottom_e', x: 670, y: GRID * 11 + 35, frameTicks: 5 },
+      { sprite: 'water_side', x: 0, y: 530, frameTicks: 5 },
+    ],
   },
   [MapType.Ruins]: {
     width: 20,
@@ -246,7 +255,7 @@ export function createMapLayout(type: MapType, mixerCode = 0): MapLayout {
     obstacles: (def.obstacles ?? []).map(decodeObstacle),
     fixedPath: false,
     image: def.image,
-    underlays: [],
+    underlays: def.underlays ?? [],
     overlays: def.overlays ?? [],
     starfield: (def.starfield ?? []).map(toRect),
     scoreMultiplier: def.scoreMultiplier,

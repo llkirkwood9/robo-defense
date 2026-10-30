@@ -150,7 +150,8 @@ export class WorldRenderer {
     canvas.scale(camera.scale, camera.scale);
 
     for (const d of layout.underlays) {
-      this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
+      const frame = d.frameTicks ? Math.floor(tick / d.frameTicks) % SPRITES[d.sprite].frames : 0;
+      this.drawSprite(canvas, images.sprites, d.sprite, frame, d.x, d.y, this.spritePaint);
     }
     for (const t of state.towers) {
       const sprite = t.props.sprite;

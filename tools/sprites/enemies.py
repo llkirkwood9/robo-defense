@@ -230,8 +230,14 @@ def helicopter(phase):
     return scene
 
 
-def jet():
+def jet(phase):
+    """Swept-wing fighter; afterburner flickers, nav lights blink and it banks gently."""
+    burn = 0.75 + 0.25 * math.sin(phase * TAU * 3) + 0.1 * math.sin(phase * TAU * 7)
+    blink = phase < 0.5
+    roll = math.sin(phase * TAU) * 0.07
+
     def scene(p):
+        p = rot_y(p, roll)
         x, y, z = P(p)
         parts = []
         parts.append((capsule(p, (0, -18, 0), (0, 16, 0), 3.4, 1.0), M['silver']))
@@ -246,50 +252,69 @@ def jet():
         for sx in (-1, 1):
             fin = extrude(box2d(y + 15, z - 4, 3, 3.5), x - sx * 2.5, -0.5, 0.5, 0.3)
             parts.append((fin, M['blue']))
+        parts.append((sphere(p, (-16.5, -10, 0), 0.9), M['l_red'] if blink else M['maroon']))
+        parts.append((sphere(p, (16.5, -10, 0), 0.9), M['l_green'] if blink else M['green_dark']))
         parts.append((tube(p, (0, -18, 0), (0, -20, 0), 2.6), M['black']))
-        parts.append((sphere(p, (0, -20.5, 0), 2.0), M['l_amber']))
+        parts.append((capsule(p, (0, -20, 0), (0, -20 - 6 * burn, 0), 2.0, 0.4), M['molten']))
         return parts
     return scene
 
 
-def bomber():
+def bomber(phase):
+    """Heavy bomber with a wide, straight wing, four propeller engines and blinking lights."""
+    prop = phase * TAU / 3          # three-bladed props: a third of a turn loops
+    blink = phase < 0.25
+
     def scene(p):
         x, y, z = P(p)
         parts = []
-        parts.append((capsule(p, (0, -16, 0), (0, 14, 0), 4.5, 2.5), M['gunmetal']))
-        parts.append((ellipsoid(p, (0, 11, 3), (2.5, 4, 2)), M['glass']))
-        wing = extrude(np.maximum(np.abs(x) - 30, np.abs(y + 1 + np.abs(x) * 0.25) - 4.5), z, -1, 1, 0.6)
+        parts.append((capsule(p, (0, -17, 0), (0, 15, 0), 4.6, 2.6), M['gunmetal']))
+        parts.append((ellipsoid(p, (0, 12, 2.6), (2.6, 4.5, 2.2)), M['glass']))
+        # Long, slightly tapered wing spanning nearly the whole frame.
+        chord = 5.2 - np.abs(x) * 0.06
+        wing = extrude(np.maximum(np.abs(x) - 37, np.abs(y - 1 + np.abs(x) * 0.08) - chord), z, -1.1, 1.1, 0.6)
         parts.append((wing, M['purple']))
-        parts.append((extrude(np.maximum(np.abs(x) - 11, np.abs(y + 17 + np.abs(x) * 0.2) - 2.5), z - 0.5, -0.7, 0.7, 0.4), M['purple']))
+        parts.append((np.maximum(wing - 0.05, np.abs(np.abs(x) - 20) - 1.0), M['gunmetal']))   # wing bands
+        parts.append((extrude(np.maximum(np.abs(x) - 12, np.abs(y + 17 + np.abs(x) * 0.12) - 2.6), z - 0.6, -0.7, 0.7, 0.4), M['purple']))
+        parts.append((extrude(box2d(y + 16, z - 4.5, 3, 4.5), x, -0.6, 0.6, 0.3), M['purple']))
         for sx in (-1, 1):
-            for ex in (10, 20):
-                ey = -1 - ex * 0.25
-                parts.append((capsule(p, (sx * ex, ey - 4, -2), (sx * ex, ey + 6, -2), 2.0), M['steel']))
-                parts.append((sphere(p, (sx * ex, ey - 4.5, -2), 1.4), M['l_amber']))
-            parts.append((sphere(p, (sx * 29, -8.5, 0.5), 1.2), M['l_red']))
-        parts.append((extrude(box2d(y + 16, z - 4, 3, 4), x, -0.6, 0.6, 0.3), M['purple']))
+            for ex in (11.0, 25.0):
+                ey = 1 - ex * 0.08
+                c = np.array([sx * ex, ey, -1.2])
+                parts.append((capsule(p, c + [0, -6, 0], c + [0, 6, 0], 2.3), M['steel']))
+                parts.append((sphere(p, c + [0, 7.2, 0], 1.3), M['black']))
+                q = rot_y(p - (c + [0, 7.6, 0]), prop * sx)
+                for b in range(3):
+                    qb = rot_y(q, b * TAU / 3)
+                    parts.append((box(qb, (0, 0, 2.6), (0.9, 0.3, 2.4), 0.3), M['steel']))
+            parts.append((sphere(p, (sx * 37.5, -2, 0), 1.3), M['l_red'] if blink else M['maroon']))
+        parts.append((sphere(p, (0, -1, 4.2), 1.0), M['l_white'] if not blink else M['steel']))
         return parts
     return scene
 
 
-def mothership():
-    """Armoured saucer carrier: dark hull plates, glowing drop bays and running lights."""
+def mothership(phase):
+    """Armoured saucer carrier: the hull turns slowly, rim lights chase and the core pulses."""
+    spin = phase * TAU / 12          # 12-fold symmetric hull: a twelfth of a turn loops
+    pulse = 0.5 + 0.5 * math.cos(phase * TAU)
+
     def scene(p):
+        p = rot_z(p, spin)
         x, y, z = P(p)
         parts = []
         hull = ellipsoid(p, (0, 0, 0), (36, 36, 7.5))
-        # Radial panel grooves cut into the hull.
         ang = np.arctan2(y, x)
-        grooves = np.abs(np.sin(ang * 8)) * 3 - 0.35
+        grooves = np.abs(np.sin(ang * 6)) * 3 - 0.35
         parts.append((hull, M['gunmetal']))
         parts.append((np.maximum(hull - 0.25, -grooves), M['steel']))
         parts.append((ellipsoid(p, (0, 0, 4), (20, 20, 9)), M['steel']))
-        parts.append((torus_z(p, 0, 0, 5, 19.5, 1.4), M['l_blue']))
+        parts.append((torus_z(p, 0, 0, 5, 19.5, 1.4), M['l_blue'] if pulse > 0.35 else M['blue']))
         parts.append((ellipsoid(p, (0, 0, 10), (9, 9, 5.5)), M['glass']))
         parts.append((torus_z(p, 0, 0, 0, 34, 2.6), M['black']))
+        lit = int(phase * 12) % 3
         for a in range(12):
             q = rot_z(p, a * TAU / 12)
-            parts.append((sphere(q, (0, -34.5, 1.8), 1.7), M['l_cyan'] if a % 2 else M['l_white']))
+            parts.append((sphere(q, (0, -34.5, 1.8), 1.7), M['l_cyan'] if a % 3 == lit else M['steel']))
         for a in range(4):
             q = rot_z(p, a * TAU / 4 + TAU / 8)
             parts.append((box(q, (0, -27, 4), (5, 4, 3), 1.5), M['gunmetal']))
@@ -359,7 +384,7 @@ def flyer_sheet(size, model, frames_per_dir, cam, shadow_dy, scale=1.0):
     frames = []
     for h in HEADINGS:
         for f in range(frames_per_dir):
-            m = model(f / frames_per_dir) if frames_per_dir > 1 else model()
+            m = model(f / frames_per_dir)
             if scale != 1:
                 m = scaled(m, scale)
             frames.append(dict(scene=heading(m, h), cam=cam,
@@ -390,8 +415,8 @@ def sheets():
         'titan': unit_sheet((70, 140), titan, 10, dict(fw=70, fh=140, ox=35, oy=116, elev=UNIT_ELEV), radius=40),
         # Flyers: drawn high in a tall frame with their shadow dropped onto the ground below.
         'helicopter': flyer_sheet((105, 175), helicopter, 6, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.25),
-        'jet': flyer_sheet((105, 175), jet, 1, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.35),
-        'bomber': flyer_sheet((105, 175), bomber, 1, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.3),
-        'mothership': flyer_sheet((105, 151), mothership, 1, dict(fw=105, fh=151, ox=52.5, oy=40, elev=UNIT_ELEV), 70, 1.15),
+        'jet': flyer_sheet((105, 175), jet, 6, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.35),
+        'bomber': flyer_sheet((105, 175), bomber, 8, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.32),
+        'mothership': flyer_sheet((105, 151), mothership, 8, dict(fw=105, fh=151, ox=52.5, oy=40, elev=UNIT_ELEV), 70, 1.15),
     }
     return s

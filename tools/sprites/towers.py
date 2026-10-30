@@ -34,13 +34,27 @@ def diag_feet(p, mat, reach=27.0, w=4.0, l=7.0, z1=22.0, rnd=1.2):
     return out
 
 
+def recolor(scene, mapping):
+    """Swaps materials by name, e.g. {'green': 'blue'}."""
+    table = {M[a]: M[b] for a, b in mapping.items()}
+
+    def f(p):
+        return [(d, table.get(m, m)) for d, m in scene(p)]
+    return f
+
+
+# The basic gun family is blue and the antiair family green.
+GUN_COLORS = {'green': 'blue', 'green_dark': 'navy', 'l_green': 'l_blue'}
+AA_COLORS = {'navy': 'green', 'blue': 'green_dark', 'l_blue': 'l_green'}
+
+
 def cut(d, *holes):
     for h in holes:
         d = np.maximum(d, -h)
     return d
 
 
-# ---- Gun towers (green) ---------------------------------------------------------------------
+# ---- Gun towers (modelled green, recoloured blue) ---------------------------------------------------------------
 
 def gun_base(level):
     def scene(p):
@@ -96,7 +110,7 @@ def gun_turret(level):
     return scene
 
 
-# ---- Antiair (navy / blue) -------------------------------------------------------------------
+# ---- Antiair (modelled navy, recoloured green) --------------------------------------------------------------
 
 def aa_base(level):
     def scene(p):
@@ -216,25 +230,36 @@ def rocket_base(level):
 
 def rocket_turret(level):
     pods = {1: [0.0], 2: [-6.5, 6.5], 3: [-11.5, 0.0, 11.5]}[level]
-    tilt = math.radians(14)
+    tilt = math.radians(16)    # nose up
 
     def pod(p, cx):
-        q = rot_x(p - np.array([cx, 0, 12]), -tilt)
-        body = box(q, (0, 2, 0), (5.4, 11, 5.4), 1.4)
-        holes = []
-        for hx in (-2.4, 2.4):
-            for hz in (-2.4, 2.4):
-                holes.append(np.maximum(length(np.stack([q[:, 0] - hx, q[:, 2] - hz], -1)) - 1.6,
-                                        -(q[:, 1] - 10.5)))
-        stripe = box(q, (0, -4, 0), (5.6, 1.2, 5.6), 0.4)
-        tips = [(sphere(q, (hx, 11.6, hz), 1.2), M['red']) for hx in (-2.4, 2.4) for hz in (-2.4, 2.4)]
-        return [(cut(body, *holes), M['yellow']), (stripe, M['black'])] + tips
+        q = rot_x(p - np.array([cx, 0, 13]), tilt)
+        body = box(q, (0, 1, 0), (5.4, 11, 5.4), 1.4)
+        tubes = [(hx, hz) for hx in (-2.4, 2.4) for hz in (-2.4, 2.4)]
+        holes = [np.maximum(length(np.stack([q[:, 0] - hx, q[:, 2] - hz], -1)) - 1.75, -(q[:, 1] - 8.0))
+                 for hx, hz in tubes]
+        out = [
+            (cut(body, *holes), M['yellow']),
+            (box(q, (0, -5, 0), (5.6, 1.1, 5.6), 0.4), M['black']),
+            (box(q, (0, 6, 5.5), (3.5, 3.5, 0.5), 0.3), M['orange']),
+        ]
+        # Loaded rockets: white bodies in the tubes, red warheads just past the muzzles.
+        for hx, hz in tubes:
+            out.append((capsule(q, (hx, 3, hz), (hx, 12.0, hz), 1.55), M['white']))
+            out.append((capsule(q, (hx, 12.0, hz), (hx, 15.5, hz), 1.55, 0.2), M['red']))
+        return out
 
     def scene(p):
+        x, y, z = P(p)
+        span = 3 + len(pods) * 5.5
         parts = [
             (cyl(p, 0, 0, 12, 0, 5, 0.8), M['black']),
-            (box(p, (0, -2, 7), (3 + len(pods) * 4, 6, 3), 1.2), M['steel']),
+            # A-frame support plates on either side of the launcher and a cross axle.
+            (tube(p, (-span, 0, 12), (span, 0, 12), 1.6), M['steel']),
         ]
+        for sx in (-1, 1):
+            plate = extrude(np.maximum(np.abs(y) - 7 + z * 0.5, -z + 1), x - sx * span, -1.0, 1.0, 0.4)
+            parts.append((np.maximum(plate, z - 13), M['steel']))
         for cx in pods:
             parts += pod(p, cx)
         return parts
@@ -320,37 +345,51 @@ def heavy_base(kind):
 
 
 def mortar_turret():
+    """Stubby, steep mortar tube with a flared, hollow muzzle."""
     def scene(p):
-        x, y, z = P(p)
-        tilt = math.radians(70)
+        tilt = math.radians(72)
         d = np.array([0, math.cos(tilt), math.sin(tilt)])
         a = np.array([0, -2.0, 6.0])
+        tip = a + d * 17
+        outer = tube(p, a, tip, 5.6, 1.0)
+        bore = tube(p, a + d * 6, tip + d * 2, 3.6, 0.2)
+        flare = tube(p, tip - d * 3, tip, 6.8, 1.2)
         return [
             (cyl(p, 0, 0, 12, 0, 6, 1), M['black']),
             (sphere(p, (0, 0, 7), 9), M['gunmetal']),
-            (tube(p, a, a + d * 20, 6.2, 1.0), M['steel']),
-            (tube(p, a + d * 17, a + d * 21, 7.2, 0.8), M['gold']),
-            (tube(p, a + d * 8, a + d * 10, 6.8, 0.4), M['l_purple']),
-            (tube(p, a + d * 20.5, a + d * 21.2, 4.6, 0.1), M['black']),
+            (cut(outer, bore), M['steel']),
+            (cut(flare, bore), M['gold']),
+            (tube(p, a + d * 7, a + d * 9, 6.2, 0.4), M['l_purple']),
+            (tube(p, a + d * 5.5, a + d * 7, 3.7, 0.2), M['black']),    # bottom of the bore
         ]
     return scene
 
 
 def artillery_turret():
+    """Heavy howitzer: armoured gun house, thick barrel with muzzle brake and recoil cylinders."""
     def scene(p):
-        tilt = math.radians(48)
+        x, y, z = P(p)
+        tilt = math.radians(42)
         d = np.array([0, math.cos(tilt), math.sin(tilt)])
-        a = np.array([0, -3.0, 9.0])
-        return [
-            (cyl(p, 0, 0, 13, 0, 7, 1), M['black']),
-            (box(p, (0, -2, 10), (10, 10, 6), 3), M['gunmetal']),
-            (box(p, (0, -2, 16.5), (7, 7, 1), 0.6), M['purple']),
-            (tube(p, a, a + d * 34, 4.2, 0.6), M['steel']),
-            (tube(p, a, a + d * 12, 6.0, 1.0), M['gold']),
-            (tube(p, a + d * 22, a + d * 23.5, 5.0, 0.4), M['l_purple']),
-            (tube(p, a + d * 31, a + d * 35, 5.2, 0.8), M['black']),
-            (tube(p, a + d * 35, a + d * 35.4, 3.0, 0.1), M['l_green']),
+        a = np.array([0, 2.0, 12.0])
+        brake = a + d * 27
+        parts = [
+            (cyl(p, 0, 0, 13, 0, 6, 1), M['black']),
+            (box(p, (0, -2, 11), (11, 12, 6), 3.5), M['gunmetal']),
+            (box(p, (0, -4, 17.5), (8, 8, 1.4), 1.0), M['purple']),
+            (box(p, (0, -13.5, 11), (9, 2.5, 4.5), 1.5), M['steel']),       # rear ammo bustle
         ]
+        for sx in (-1, 1):
+            parts.append((box(p, (sx * 11.5, 0, 11), (1.6, 10, 5.5), 1.0), M['gold']))   # cheek armour
+            parts.append((tube(p, a + [sx * 3.6, 0, -2.6], a + [sx * 3.6, 0, -2.6] + d * 13, 1.3), M['silver']))
+        parts += [
+            (tube(p, a - d * 2, a + d * 10, 5.2, 1.2), M['steel']),           # mantlet / cradle
+            (tube(p, a, brake, 3.4, 0.6), M['silver']),
+            (tube(p, a + d * 17, a + d * 18.5, 4.0, 0.4), M['l_purple']),
+            (cut(tube(p, brake - d * 1, brake + d * 5, 4.4, 0.8), tube(p, brake, brake + d * 6, 2.4, 0.0)), M['black']),
+            (sphere(p, brake + d * 3, 1.8), M['l_green']),
+        ]
+        return parts
     return scene
 
 
@@ -551,9 +590,9 @@ def sheets():
     """sheet id -> list of frame jobs."""
     s = {}
     for lvl, sid in ((1, 'gun_tower'), (2, 'gun_tower2'), (3, 'gun_tower3')):
-        s[sid] = [base_frame(gun_base(lvl))] + turret_frames(gun_turret(lvl))
+        s[sid] = [base_frame(recolor(gun_base(lvl), GUN_COLORS))] +             turret_frames(recolor(gun_turret(lvl), GUN_COLORS))
     for lvl, sid in ((1, 'aa_tower'), (2, 'aa_tower2')):
-        s[sid] = [base_frame(aa_base(lvl))] + turret_frames(aa_turret(lvl))
+        s[sid] = [base_frame(recolor(aa_base(lvl), AA_COLORS))] +             turret_frames(recolor(aa_turret(lvl), AA_COLORS))
     for lvl, sid in ((1, 'flame_tower'), (2, 'flame_tower2')):
         s[sid] = [base_frame(flame_base(lvl))] + turret_frames(flame_turret(lvl))
     for lvl, sid in ((1, 'rocket_tower'), (2, 'rocket_tower2'), (3, 'rocket_tower3')):
@@ -561,9 +600,9 @@ def sheets():
     for lvl, sid in ((1, 'sam_tower'), (2, 'sam_tower2')):
         s[sid] = [base_frame(sam_base(lvl))] + turret_frames(sam_turret(lvl))
     s['mortar'] = [base_frame(heavy_base('mortar')),
-                   dict(scene=scaled(mortar_turret(), 1.45), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=24)]
+                   dict(scene=scaled(mortar_turret(), 1.4), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=24)]
     s['artillery'] = [base_frame(heavy_base('artillery')),
-                      dict(scene=scaled(artillery_turret(), 1.2), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=26)]
+                      dict(scene=heading(scaled(artillery_turret(), 1.2), TAU * 0.16), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=26)]
     for lvl, sid in ((1, 'ice_tower'), (2, 'ice_tower2'), (3, 'ice_tower3')):
         s[sid] = [base_frame(ice_base(lvl))] + [
             dict(scene=translate(scaled(ice_crystal(lvl, f / 8), 1.25), 0, 0, -15), cam=dict(BASE_CAM), ground_shadow=0.0, glow=('cyan', 0.35 + 0.15 * math.sin(f / 8 * TAU)))

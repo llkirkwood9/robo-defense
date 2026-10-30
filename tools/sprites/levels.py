@@ -206,7 +206,23 @@ def edge_band(c, width):
     return 1 - smoothstep(0, width, d)
 
 
-# ---- Basic: meadow ringed by a low rock wall, bunker gates west and east -------------------------
+# ---- Basic: meadow with a boulder wall, pines, a bulkhead wall east and water to the south ------
+
+# Water areas in world px (x0, y0, x1, y1); maps.ts places the animated overlays on the same rects.
+WATER_BOTTOM = (0, 805, 1340, 840)
+WATER_SIDE = (0, 530, 45, 805)
+EAST_WALL_X = 1340
+
+
+def basic_water_mask(c):
+    """Irregular shoreline kept inside the WATER_* rects."""
+    wob = fbm(c.w, c.h, 40, 9, 3)
+    x0, y0, x1, y1 = (v * PPU for v in WATER_BOTTOM)
+    bottom = smoothstep(0, 3, c.y - (y0 + 10 + wob * 18)) * (c.x < x1)
+    sx0, sy0, sx1, sy1 = (v * PPU for v in WATER_SIDE)
+    side = smoothstep(0, 3, (sx1 - 12 - wob * 18) - c.x) * smoothstep(0, 3, c.y - (sy0 + 14 + wob * 14))
+    return np.clip(np.maximum(bottom, side), 0, 1).astype(np.float32)
+
 
 def basic_level():
     c = Canvas(20, 12)
@@ -215,31 +231,99 @@ def basic_level():
     blades = value_noise(c.w, c.h, 2, 3)
     grass = palette_map(np.clip(n * 1.3 - 0.15 + (blades - 0.5) * 0.25, 0, 1),
                         [(0, (0.12, 0.26, 0.07)), (0.5, (0.24, 0.48, 0.12)), (1, (0.44, 0.66, 0.2))])
-    dirt_m = smoothstep(0.62, 0.7, fbm(c.w, c.h, 260, 4) + (fine - 0.5) * 0.15)
-    dirt = palette_map(fine, [(0, (0.24, 0.17, 0.1)), (1, (0.42, 0.31, 0.19))])
-    c.A[:] = mix(grass, dirt, dirt_m * 0.85)
-    c.H[:] = blades * 2.0 * (1 - dirt_m) + n * 6
+    dirt = palette_map(fine, [(0, (0.22, 0.14, 0.08)), (1, (0.4, 0.28, 0.17))])
+    patches = smoothstep(0.64, 0.72, fbm(c.w, c.h, 260, 4) + (fine - 0.5) * 0.15)
+    # Bare-earth rim around the meadow (wider along the south shore and west edge).
+    edge_d = np.minimum(np.minimum(c.x - 30, (EAST_WALL_X * PPU) - c.x), np.minimum(c.y - 60, c.h - c.y))
+    rim = 1 - smoothstep(10, 46 + (fine - 0.5) * 30, edge_d)
+    bare = np.maximum(patches * 0.85, rim)
+    c.A[:] = mix(grass, dirt, bare)
+    c.H[:] = blades * 2.0 * (1 - bare) + n * 6
     c.S[:] = 0.05
-    # Rock wall rim, broken at the gates.
-    rim = edge_band(c, T * 0.32) * (1 - gate_mask(c, [774, 262], 0.6))
-    rocks = fbm(c.w, c.h, 40, 7, 4)
-    rock_h = smoothstep(0.25, 0.9, rim + (rocks - 0.5) * 0.6) * (24 + rocks * 20)
-    rock_col = palette_map(rocks, [(0, (0.22, 0.22, 0.24)), (0.6, (0.45, 0.45, 0.47)), (1, (0.6, 0.6, 0.6))])
-    m = smoothstep(2, 6, rock_h)
-    c.H = np.maximum(c.H, rock_h)
-    c.paint(m, albedo=rock_col, spec=0.15)
-    # Gates: steel pads with hazard-lit thresholds.
-    for code, col in ((774, (0.35, 1.0, 0.45)), (262, (1.0, 0.3, 0.2))):
-        side = code >> 8
-        row = code & 255
-        x0 = 0 if side == 3 else c.w - T * 0.55
-        pad = c.rrect(x0 - 6, row * T + 14, x0 + T * 0.55 + 6, (row + 1) * T - 14, 10)
-        c.block(pad, 6, 6, (0.32, 0.34, 0.38), 0.6)
-        for i in range(3):
-            yy = row * T + 30 + i * 40
-            lamp = c.disc(x0 + (T * 0.45 if side == 3 else T * 0.1), yy, 5)
-            c.paint(lamp[0], albedo=(0, 0, 0), emit=col)
+
+    # Boulder wall along the north edge.
+    rng = np.random.default_rng(5)
+    x = -20.0
+    while x < EAST_WALL_X * PPU + 40:
+        r = rng.uniform(26, 66)
+        cy = rng.uniform(-10, 26)
+        rock = c.disc(x + r * 0.8, cy, r, 2)
+        tex = fbm(c.w, c.h, 18, int(x) % 997 + 6, 3)
+        prof = np.sqrt(np.clip(1 - ((c.x - x - r * 0.8) ** 2 + (c.y - cy) ** 2) / (r * r), 0, 1))
+        top = 30 + prof * (r * 0.9) + tex * 6
+        m = rock[0]
+        c.H = np.where(m > 0, np.maximum(c.H, top * m + c.H * (1 - m)), c.H)
+        tone = rng.uniform(-0.08, 0.06)
+        col = palette_map(np.clip(tex * 0.75 + prof * 0.25 + tone, 0, 1),
+                          [(0, (0.2, 0.2, 0.22)), (0.5, (0.42, 0.42, 0.43)), (1, (0.62, 0.62, 0.6))])
+        c.paint(m, albedo=col, spec=0.12)
+        x += r * 1.35
+
+    # Pines along the north-west, rooted on the dirt rim above the west gate.
+    for (tx, ty, r) in ((24, 75, 23), (20, 135, 26), (30, 195, 20), (60, 55, 18), (18, 260, 17)):
+        tx, ty, r = tx * PPU, ty * PPU, r * PPU   # world px -> image px
+        d = np.sqrt((c.x - tx) ** 2 + (c.y - ty) ** 2)
+        ang = np.arctan2(c.y - ty, c.x - tx)
+        frond = r * (0.78 + 0.22 * np.abs(np.sin(ang * 6)))
+        m = smoothstep(frond, frond - 3, d)
+        cone = (1 - d / r).clip(0, 1) * 70 + 20
+        c.H = np.maximum(c.H, cone * m)
+        shade = np.clip(1 - d / r, 0, 1)
+        c.paint(m, albedo=mix((0.03, 0.12, 0.05), (0.12, 0.32, 0.12), shade), spec=0.04)
+
+    # Water with a wet, darker shore.
+    water = basic_water_mask(c)
+    shore = np.clip(blur(water, 10) * 2.2, 0, 1) * (1 - water)
+    c.paint(shore * 0.75, albedo=(0.12, 0.09, 0.07))
+    depth = blur(water, 16)
+    ripple = fbm(c.w, c.h, 14, 10, 3)
+    c.H = c.H * (1 - water) + (-8 + ripple * 1.5) * water
+    c.paint(water, albedo=mix((0.05, 0.16, 0.28), (0.02, 0.06, 0.14), depth), spec=0.9)
+
+    # East bulkhead wall with blue lights, open at the exit (row 6).
+    wx = EAST_WALL_X * PPU
+    gap = (c.y > 6 * T + 6) & (c.y < 7 * T - 6)
+    wall_m, wall_in = c.rect(wx, -10, c.w + 10, c.h + 10, 2)
+    c.block((wall_m * ~gap, wall_in), 64, 10, (0.36, 0.38, 0.43), 0.6)
+    for k in range(12):
+        y0 = k * T + 14
+        seg_m, seg_in = c.rrect(wx + 10, y0, c.w - 8, y0 + T - 28, 8)
+        c.block((seg_m * ~gap, seg_in), 72, 6, (0.5, 0.53, 0.58), 0.7)
+        if not (6 * T - 20 < y0 < 7 * T):
+            lamp = c.rect(wx + 4, y0 + 24, wx + 14, y0 + 60, 1.5)[0]
+            c.paint(lamp, albedo=(0, 0, 0), emit=(0.2, 0.45, 1.0))
+    # Plated apron in front of the exit.
+    apron = c.rrect(wx - 2.3 * T, 4.4 * T, wx + 4, 8.6 * T, 12)
+    c.block(apron, 8, 5, (0.32, 0.34, 0.38), 0.55)
+    seams = ((np.mod(c.x - wx, 70) < 3) | (np.mod(c.y, 70) < 3)) * apron[0]
+    c.paint(seams * 0.8, albedo=(0.14, 0.15, 0.17))
+    chev = (np.abs(np.mod(c.x - wx + np.abs(c.y - 6.5 * T) * 0.8, 60) - 30) < 8) *         c.rect(wx - 2 * T, 6 * T + 26, wx - 10, 7 * T - 26, 1)[0]
+    hazard(c, chev)
+
+    # West gate: a gravel path mouth with marker lamps.
+    for yy in (6 * T + 18, 7 * T - 18):
+        lamp = c.disc(16, yy, 6)[0]
+        c.paint(lamp, albedo=(0, 0, 0), emit=(0.35, 1.0, 0.45))
+    c.water_mask = water
     return c
+
+
+def water_frame(c, water, t):
+    """Moving glints and lapping foam over the water, as an RGBA overlay; t in [0, 1)."""
+    x, y = c.x, c.y
+    k = math.tau
+    w1 = np.sin(x / 31.0 + y / 9.0 - k * t * 2) * np.sin(x / 17.0 - y / 23.0 + k * t)
+    w2 = np.sin(x / 13.0 - y / 7.0 + k * t * 3) * np.sin(y / 11.0 + k * t * 2)
+    w3 = np.sin(x / 7.0 + y / 5.0 - k * t * 4)
+    # Sparse, irregular sun glints: interference peaks broken up by static noise.
+    grain = fbm(c.w, c.h, 10, 78, 3)
+    glint = smoothstep(0.78, 0.95, 0.5 + 0.3 * w1 + 0.25 * w2 + 0.12 * w3 + (grain - 0.5) * 0.5) * water * 0.7
+    edge = np.clip(water - blur(water, 6), 0, 1) * 3       # just inside the shoreline
+    lap = 0.5 + 0.5 * np.sin(k * t + x / 40.0 + y / 40.0)
+    foam = np.clip(edge, 0, 1) * (0.35 + 0.65 * lap) * smoothstep(0.2, 0.6, fbm(c.w, c.h, 8, 77, 2) + lap * 0.3)
+    a = np.clip(glint * 0.85 + foam * 0.8, 0, 1)
+    rgb = np.ones(a.shape + (3,), np.float32) * np.array([0.85, 0.93, 1.0], np.float32)
+    return np.dstack([rgb * 255, a * 255]).round().clip(0, 255).astype(np.uint8)
 
 
 # ---- Ruins: sandstone pavers and dry grass, crumbled walls with four gates --------------------------
@@ -670,6 +754,11 @@ class _Draw:
             c = vr_tile(*self.args)
             rgb = c.shade()
             return np.dstack([rgb, np.full(rgb.shape[:2], 255, np.uint8)])
+        if self.kind == 'water':
+            (x0, y0, x1, y1), t = self.args
+            frames = water_source()
+            img = frames[int(round(t * len(frames)))]
+            return img[y0 * PPU:y1 * PPU, x0 * PPU:x1 * PPU]
         sid, x, y, ow, oh = self.args
         rgb, mask = courtyard_overlay_source()
         x0, y0 = x * PPU, y * PPU
@@ -689,6 +778,20 @@ def courtyard_overlay_source():
     return _COURT
 
 
+_WATER = None
+WATER_FRAMES = 12
+
+
+def water_source():
+    """All water overlay frames for the Basic map (full map size, computed once per process)."""
+    global _WATER
+    if _WATER is None:
+        c = Canvas(20, 12)
+        water = basic_water_mask(c)
+        _WATER = [water_frame(c, water, f / WATER_FRAMES) for f in range(WATER_FRAMES)]
+    return _WATER
+
+
 def sprite_sheets():
     s = {
         'mixer_1x1': dict(size=(70, 70), frames=[dict(draw=_Draw('vr', '1x1'))]),
@@ -700,6 +803,15 @@ def sprite_sheets():
     for side in 'nsew':
         s[f'mixer_entrance_{side}'] = dict(size=(70, 70), frames=[dict(draw=_Draw('vr', 'entrance', 1, 1, side))])
         s[f'mixer_exit_{side}'] = dict(size=(70, 70), frames=[dict(draw=_Draw('vr', 'exit', 1, 1, side))])
+    # The south strip is split in two so no sheet is wider than 2048 px.
+    bx0, by0, bx1, by1 = WATER_BOTTOM
+    half = (bx1 - bx0) // 2
+    for sid, x0 in (('water_bottom_w', bx0), ('water_bottom_e', bx0 + half)):
+        s[sid] = dict(size=(half, by1 - by0), frames=[
+            dict(draw=_Draw('water', (x0, by0, x0 + half, by1), f / WATER_FRAMES)) for f in range(WATER_FRAMES)])
+    sx0, sy0, sx1, sy1 = WATER_SIDE
+    s['water_side'] = dict(size=(sx1 - sx0, sy1 - sy0), frames=[
+        dict(draw=_Draw('water', WATER_SIDE, f / WATER_FRAMES)) for f in range(WATER_FRAMES)])
     for sid, x, y, w, h in COURTYARD_ARCHES:
         s[sid] = dict(size=(w, h), frames=[dict(draw=_Draw('court', sid, x, y, w, h))])
     return s

@@ -77,10 +77,10 @@ export const SPRITES = {
   light_tank: squares(70, 12),
   heavy_tank: squares(70, 40),
   helicopter: strip(105, 175, 24),
-  jet: strip(105, 175, 4),
-  bomber: strip(105, 175, 4),
+  jet: strip(105, 175, 24),
+  bomber: strip(105, 175, 32),
   titan: strip(70, 140, 40),
-  mothership: strip(105, 151, 4),
+  mothership: strip(105, 151, 32),
 
   // Projectiles: one frame, or 32 directional frames.
   bullet_small: squares(35, 1),
@@ -97,6 +97,9 @@ export const SPRITES = {
   fire: squares(35, 25),
 
   // Map decorations.
+  water_bottom_e: strip(670, 35, 12),
+  water_bottom_w: strip(670, 35, 12),
+  water_side: strip(45, 275, 12),
   courtyard_ne_overlay: strip(32, 63, 1),
   courtyard_nw_overlay: strip(32, 63, 1),
   courtyard_se_overlay: strip(45, 65, 1),
