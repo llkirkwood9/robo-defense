@@ -366,29 +366,23 @@ def mortar_turret():
 
 
 def artillery_turret():
-    """Heavy howitzer: armoured gun house, thick barrel with muzzle brake and recoil cylinders."""
+    """Big near-vertical siege barrel: a thick dark tube with a steel muzzle ring and a glowing bore."""
     def scene(p):
-        x, y, z = P(p)
-        tilt = math.radians(42)
+        tilt = math.radians(80)
         d = np.array([0, math.cos(tilt), math.sin(tilt)])
-        a = np.array([0, 2.0, 12.0])
-        brake = a + d * 27
+        a = np.array([0, 0.0, 4.0])
+        tip = a + d * 24
+        bore = tube(p, tip - d * 4, tip + d * 2, 4.6, 0.2)
         parts = [
-            (cyl(p, 0, 0, 13, 0, 6, 1), M['black']),
-            (box(p, (0, -2, 11), (11, 12, 6), 3.5), M['gunmetal']),
-            (box(p, (0, -4, 17.5), (8, 8, 1.4), 1.0), M['purple']),
-            (box(p, (0, -13.5, 11), (9, 2.5, 4.5), 1.5), M['steel']),       # rear ammo bustle
+            (cyl(p, 0, 0, 12, 0, 5, 1.5), M['black']),
+            (cut(tube(p, a, tip, 7.6, 2.5), bore), M['black']),
+            (cut(tube(p, tip - d * 3.5, tip, 8.2, 1.6), bore), M['steel']),     # muzzle ring
+            (tube(p, a + d * 9, a + d * 11, 8.0, 0.6), M['gunmetal']),          # barrel band
+            (tube(p, a + d * 14, a + d * 15.5, 7.9, 0.5), M['l_purple']),
+            (tube(p, tip - d * 4.5, tip - d * 3.5, 4.4, 0.3), M['l_green']),    # glowing charge in the bore
         ]
         for sx in (-1, 1):
-            parts.append((box(p, (sx * 11.5, 0, 11), (1.6, 10, 5.5), 1.0), M['gold']))   # cheek armour
-            parts.append((tube(p, a + [sx * 3.6, 0, -2.6], a + [sx * 3.6, 0, -2.6] + d * 13, 1.3), M['silver']))
-        parts += [
-            (tube(p, a - d * 2, a + d * 10, 5.2, 1.2), M['steel']),           # mantlet / cradle
-            (tube(p, a, brake, 3.4, 0.6), M['silver']),
-            (tube(p, a + d * 17, a + d * 18.5, 4.0, 0.4), M['l_purple']),
-            (cut(tube(p, brake - d * 1, brake + d * 5, 4.4, 0.8), tube(p, brake, brake + d * 6, 2.4, 0.0)), M['black']),
-            (sphere(p, brake + d * 3, 1.8), M['l_green']),
-        ]
+            parts.append((box(p, (sx * 9.5, 0, 6), (2.2, 6, 5), 1.2), M['gold']))   # trunnion brackets
         return parts
     return scene
 
@@ -602,7 +596,7 @@ def sheets():
     s['mortar'] = [base_frame(heavy_base('mortar')),
                    dict(scene=scaled(mortar_turret(), 1.4), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=24)]
     s['artillery'] = [base_frame(heavy_base('artillery')),
-                      dict(scene=heading(scaled(artillery_turret(), 1.2), TAU * 0.16), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=26)]
+                      dict(scene=scaled(artillery_turret(), 1.25), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=26)]
     for lvl, sid in ((1, 'ice_tower'), (2, 'ice_tower2'), (3, 'ice_tower3')):
         s[sid] = [base_frame(ice_base(lvl))] + [
             dict(scene=translate(scaled(ice_crystal(lvl, f / 8), 1.25), 0, 0, -15), cam=dict(BASE_CAM), ground_shadow=0.0, glow=('cyan', 0.35 + 0.15 * math.sin(f / 8 * TAU)))

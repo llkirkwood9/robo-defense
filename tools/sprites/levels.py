@@ -209,18 +209,23 @@ def edge_band(c, width):
 # ---- Basic: meadow with a boulder wall, pines, a bulkhead wall east and water to the south ------
 
 # Water areas in world px (x0, y0, x1, y1); maps.ts places the animated overlays on the same rects.
-WATER_BOTTOM = (0, 805, 1340, 840)
-WATER_SIDE = (0, 530, 45, 805)
+WATER_BOTTOM = (0, 790, 1340, 840)
+WATER_SIDE = (0, 500, 56, 790)
 EAST_WALL_X = 1340
+# (x, y, radius) in world px.
+BASIC_PINES = ((24, 75, 23), (60, 55, 18), (20, 135, 26), (48, 108, 15), (30, 195, 20), (54, 170, 14),
+               (16, 250, 19), (42, 232, 13), (26, 300, 21), (52, 285, 14), (14, 352, 17), (40, 340, 13),
+               (24, 398, 15))
 
 
 def basic_water_mask(c):
     """Irregular shoreline kept inside the WATER_* rects."""
     wob = fbm(c.w, c.h, 40, 9, 3)
+    wob = (wob - wob.min()) / np.ptp(wob)
     x0, y0, x1, y1 = (v * PPU for v in WATER_BOTTOM)
-    bottom = smoothstep(0, 3, c.y - (y0 + 10 + wob * 18)) * (c.x < x1)
+    bottom = smoothstep(0, 3, c.y - (y0 + (4 + wob * 28))) * (c.x < x1)
     sx0, sy0, sx1, sy1 = (v * PPU for v in WATER_SIDE)
-    side = smoothstep(0, 3, (sx1 - 12 - wob * 18) - c.x) * smoothstep(0, 3, c.y - (sy0 + 14 + wob * 14))
+    side = smoothstep(0, 3, (sx1 - (4 + wob * 28)) - c.x) * smoothstep(0, 3, c.y - (sy0 + (4 + wob * 28)))
     return np.clip(np.maximum(bottom, side), 0, 1).astype(np.float32)
 
 
@@ -259,8 +264,8 @@ def basic_level():
         c.paint(m, albedo=col, spec=0.12)
         x += r * 1.35
 
-    # Pines along the north-west, rooted on the dirt rim above the west gate.
-    for (tx, ty, r) in ((24, 75, 23), (20, 135, 26), (30, 195, 20), (60, 55, 18), (18, 260, 17)):
+    # Pines down the west edge, from the boulders to the gate and between the gate and the water.
+    for (tx, ty, r) in BASIC_PINES:
         tx, ty, r = tx * PPU, ty * PPU, r * PPU   # world px -> image px
         d = np.sqrt((c.x - tx) ** 2 + (c.y - ty) ** 2)
         ang = np.arctan2(c.y - ty, c.x - tx)
@@ -278,7 +283,7 @@ def basic_level():
     depth = blur(water, 16)
     ripple = fbm(c.w, c.h, 14, 10, 3)
     c.H = c.H * (1 - water) + (-8 + ripple * 1.5) * water
-    c.paint(water, albedo=mix((0.05, 0.16, 0.28), (0.02, 0.06, 0.14), depth), spec=0.9)
+    c.paint(water, albedo=mix((0.08, 0.24, 0.36), (0.03, 0.11, 0.21), depth), spec=0.9)
 
     # East bulkhead wall with blue lights, open at the exit (row 6).
     wx = EAST_WALL_X * PPU
@@ -289,16 +294,37 @@ def basic_level():
         y0 = k * T + 14
         seg_m, seg_in = c.rrect(wx + 10, y0, c.w - 8, y0 + T - 28, 8)
         c.block((seg_m * ~gap, seg_in), 72, 6, (0.5, 0.53, 0.58), 0.7)
-        if not (6 * T - 20 < y0 < 7 * T):
+        if not (5 * T < y0 < 8 * T):
             lamp = c.rect(wx + 4, y0 + 24, wx + 14, y0 + 60, 1.5)[0]
             c.paint(lamp, albedo=(0, 0, 0), emit=(0.2, 0.45, 1.0))
-    # Plated apron in front of the exit.
-    apron = c.rrect(wx - 2.3 * T, 4.4 * T, wx + 4, 8.6 * T, 12)
-    c.block(apron, 8, 5, (0.32, 0.34, 0.38), 0.55)
-    seams = ((np.mod(c.x - wx, 70) < 3) | (np.mod(c.y, 70) < 3)) * apron[0]
-    c.paint(seams * 0.8, albedo=(0.14, 0.15, 0.17))
-    chev = (np.abs(np.mod(c.x - wx + np.abs(c.y - 6.5 * T) * 0.8, 60) - 30) < 8) *         c.rect(wx - 2 * T, 6 * T + 26, wx - 10, 7 * T - 26, 1)[0]
-    hazard(c, chev)
+    # Base entrance: a concrete drive leads through the gap into a dark, lit tunnel flanked by
+    # two gate towers.
+    gy0, gy1 = 6 * T, 7 * T
+    road = c.rrect(wx - 2.2 * T, gy0 - 6, c.w + 20, gy1 + 6, 10, 2)
+    asphalt = palette_map(fbm(c.w, c.h, 4, 31, 3), [(0, (0.2, 0.2, 0.21)), (1, (0.34, 0.34, 0.35))])
+    c.block(road, 5, 4, asphalt, 0.15)
+    curb = road[1]
+    c.paint(((curb > 0) & (curb < 7)) * 0.9, albedo=(0.62, 0.62, 0.58))
+    dash = (np.abs(c.y - (gy0 + gy1) / 2) < 3) * (np.mod(c.x, 60) < 32) * c.rect(wx - 2.1 * T, gy0, wx - 10, gy1, 1)[0]
+    c.paint(dash * 0.85, albedo=(0.9, 0.9, 0.85))
+    tunnel = c.rect(wx + 12, gy0 + 2, c.w + 10, gy1 - 2, 3)[0]
+    fade = smoothstep(wx + 10, c.w, c.x)
+    c.paint(tunnel, albedo=mix((0.2, 0.21, 0.24), (0.02, 0.02, 0.03), fade), height=4, spec=0.3)
+    track = (np.mod(c.x - wx, 22) < 4) * tunnel
+    c.paint(track * (1 - fade) * 0.6, albedo=(0.08, 0.08, 0.1))
+    for sgn, yy in ((-1, gy0), (1, gy1)):
+        cy = yy + sgn * 40
+        tower = c.rrect(wx - 56, cy - 38, c.w + 10, cy + 38, 12)
+        c.block(tower, 92, 8, (0.42, 0.45, 0.5), 0.7)
+        cap = c.rrect(wx - 44, cy - 26, wx + 40, cy + 26, 10)
+        c.block(cap, 104, 5, (0.3, 0.32, 0.36), 0.6)
+        vent = (np.mod(c.x - wx, 14) < 6) * c.rect(wx + 56, cy - 18, c.w - 12, cy + 18, 1)[0]
+        c.paint(vent * 0.8, albedo=(0.2, 0.21, 0.24))
+        lamp = c.disc(wx - 2, cy, 11)[0]
+        c.paint(lamp, albedo=(0, 0, 0), emit=(0.25, 0.55, 1.0))
+    # Door slot in the tunnel mouth and a lit strip overhead.
+    c.paint(c.rect(wx + 12, gy0 + 2, wx + 18, gy1 - 2, 1)[0], albedo=(0.55, 0.45, 0.12))
+    c.paint(c.rect(wx + 30, gy0 + 20, wx + 36, gy1 - 20, 1)[0], albedo=(0, 0, 0), emit=(0.25, 0.55, 1.0))
 
     # West gate: a gravel path mouth with marker lamps.
     for yy in (6 * T + 18, 7 * T - 18):
@@ -317,11 +343,11 @@ def water_frame(c, water, t):
     w3 = np.sin(x / 7.0 + y / 5.0 - k * t * 4)
     # Sparse, irregular sun glints: interference peaks broken up by static noise.
     grain = fbm(c.w, c.h, 10, 78, 3)
-    glint = smoothstep(0.78, 0.95, 0.5 + 0.3 * w1 + 0.25 * w2 + 0.12 * w3 + (grain - 0.5) * 0.5) * water * 0.7
+    glint = smoothstep(0.84, 0.98, 0.5 + 0.3 * w1 + 0.25 * w2 + 0.12 * w3 + (grain - 0.5) * 0.5) * water * 0.35
     edge = np.clip(water - blur(water, 6), 0, 1) * 3       # just inside the shoreline
     lap = 0.5 + 0.5 * np.sin(k * t + x / 40.0 + y / 40.0)
     foam = np.clip(edge, 0, 1) * (0.35 + 0.65 * lap) * smoothstep(0.2, 0.6, fbm(c.w, c.h, 8, 77, 2) + lap * 0.3)
-    a = np.clip(glint * 0.85 + foam * 0.8, 0, 1)
+    a = np.clip(glint * 0.7 + foam * 0.35, 0, 1)
     rgb = np.ones(a.shape + (3,), np.float32) * np.array([0.85, 0.93, 1.0], np.float32)
     return np.dstack([rgb * 255, a * 255]).round().clip(0, 255).astype(np.uint8)
 

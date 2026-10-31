@@ -169,9 +169,9 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     scoreMultiplier: 100,
     // Animated water along the bottom and lower-left edges of the background art.
     underlays: [
-      { sprite: 'water_bottom_w', x: 0, y: GRID * 11 + 35, frameTicks: 5 },
-      { sprite: 'water_bottom_e', x: 670, y: GRID * 11 + 35, frameTicks: 5 },
-      { sprite: 'water_side', x: 0, y: 530, frameTicks: 5 },
+      { sprite: 'water_bottom_w', x: 0, y: GRID * 11 + 20, frameTicks: 8 },
+      { sprite: 'water_bottom_e', x: 670, y: GRID * 11 + 20, frameTicks: 8 },
+      { sprite: 'water_side', x: 0, y: 500, frameTicks: 8 },
     ],
   },
   [MapType.Ruins]: {

@@ -97,9 +97,9 @@ export const SPRITES = {
   fire: squares(35, 25),
 
   // Map decorations.
-  water_bottom_e: strip(670, 35, 12),
-  water_bottom_w: strip(670, 35, 12),
-  water_side: strip(45, 275, 12),
+  water_bottom_e: strip(670, 50, 12),
+  water_bottom_w: strip(670, 50, 12),
+  water_side: strip(56, 290, 12),
   courtyard_ne_overlay: strip(32, 63, 1),
   courtyard_nw_overlay: strip(32, 63, 1),
   courtyard_se_overlay: strip(45, 65, 1),
