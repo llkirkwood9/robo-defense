@@ -297,16 +297,33 @@ def basic_level():
         if not (5 * T < y0 < 8 * T):
             lamp = c.rect(wx + 4, y0 + 24, wx + 14, y0 + 60, 1.5)[0]
             c.paint(lamp, albedo=(0, 0, 0), emit=(0.2, 0.45, 1.0))
-    # Base entrance: a concrete drive leads through the gap into a dark, lit tunnel flanked by
-    # two gate towers.
+    # Base entrance: a large concrete pad in front of a dark, lit tunnel flanked by two gate towers.
     gy0, gy1 = 6 * T, 7 * T
-    road = c.rrect(wx - 2.2 * T, gy0 - 6, c.w + 20, gy1 + 6, 10, 2)
-    asphalt = palette_map(fbm(c.w, c.h, 4, 31, 3), [(0, (0.2, 0.2, 0.21)), (1, (0.34, 0.34, 0.35))])
-    c.block(road, 5, 4, asphalt, 0.15)
-    curb = road[1]
-    c.paint(((curb > 0) & (curb < 7)) * 0.9, albedo=(0.62, 0.62, 0.58))
-    dash = (np.abs(c.y - (gy0 + gy1) / 2) < 3) * (np.mod(c.x, 60) < 32) * c.rect(wx - 2.1 * T, gy0, wx - 10, gy1, 1)[0]
-    c.paint(dash * 0.85, albedo=(0.9, 0.9, 0.85))
+    px0, cw = wx - 2.6 * T, 1.3 * T
+    pad = c.rrect(px0, 2.5 * T, wx + 20, 10.5 * T, 8, 2)
+    # Slabs laid in a running bond, each with its own tone, plus weathering stains.
+    col = np.floor((c.x - px0) / cw)
+    row = np.floor((c.y + np.mod(col, 2) * T / 2) / T)
+    slab = np.mod(np.sin(col * 12.9898 + row * 78.233) * 43758.5, 1)
+    stain = fbm(c.w, c.h, 60, 41, 4)
+    grit = fbm(c.w, c.h, 3, 42, 2)
+    tone = np.clip(0.45 + (slab - 0.5) * 0.25 + (grit - 0.5) * 0.35 - smoothstep(0.55, 0.75, stain) * 0.2, 0, 1)
+    concrete = palette_map(tone, [(0, (0.28, 0.27, 0.25)), (0.5, (0.5, 0.5, 0.48)), (1, (0.66, 0.66, 0.63))])
+    c.block(pad, 6, 4, concrete, 0.12)
+    rust = smoothstep(0.62, 0.8, fbm(c.w, c.h, 30, 43, 4)) * pad[0]
+    c.paint(rust * 0.3, albedo=(0.36, 0.2, 0.1))
+    seam_x = np.mod(c.x - px0, cw) < 4
+    seam_y = np.mod(c.y + np.mod(col, 2) * T / 2, T) < 4
+    seams = (seam_x | seam_y) * (pad[1] > 8)
+    c.paint(seams * 0.85, albedo=(0.16, 0.16, 0.15), height=4)
+    edge = (pad[1] > 0) & (pad[1] < 8)
+    c.paint(edge * 0.9, albedo=(0.62, 0.62, 0.6))
+    # Drain grates on either side of the approach.
+    for gy in (4.5 * T, 8.5 * T):
+        grate_m, grate_in = c.rrect(px0 + 0.15 * T, gy - 34, px0 + 1.15 * T, gy + 34, 6)
+        c.paint(grate_m, albedo=(0.22, 0.22, 0.23), height=3, spec=0.4)
+        slots = (np.mod(c.x, 12) < 5) * (grate_in > 6)
+        c.paint(slots, albedo=(0.04, 0.04, 0.05), height=0)
     tunnel = c.rect(wx + 12, gy0 + 2, c.w + 10, gy1 - 2, 3)[0]
     fade = smoothstep(wx + 10, c.w, c.x)
     c.paint(tunnel, albedo=mix((0.2, 0.21, 0.24), (0.02, 0.02, 0.03), fade), height=4, spec=0.3)
