@@ -198,11 +198,12 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     obstacles: [67371521, 235143681, 67568129, 235340289],
     image: 'courtyard_level',
     scoreMultiplier: 160,
+    // Archway lintels; the south ones reach 20px above their footprint (lifted by the 3D view).
     overlays: [
       { sprite: 'courtyard_ne_overlay', x: GRID * 15 + 1, y: 0 },
       { sprite: 'courtyard_nw_overlay', x: Math.trunc((GRID * 9) / 2) + 1, y: 0 },
-      { sprite: 'courtyard_sw_overlay', x: Math.trunc((GRID * 17) / 4) + 3, y: GRID * 11 + 3 },
-      { sprite: 'courtyard_se_overlay', x: GRID * 15 + 2, y: GRID * 11 + 3 },
+      { sprite: 'courtyard_sw_overlay', x: Math.trunc((GRID * 17) / 4) + 3, y: GRID * 11 - 17 },
+      { sprite: 'courtyard_se_overlay', x: GRID * 15 + 2, y: GRID * 11 - 17 },
     ],
   },
   [MapType.Roadway]: {

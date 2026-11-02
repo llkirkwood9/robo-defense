@@ -21,6 +21,8 @@ PPU = 2
 T = 70 * PPU                 # tile size in output pixels
 LIGHT = np.array([0.6, 0.5, 0.62])   # image space: +x right, +y up (north), +z out of the ground
 LIGHT = LIGHT / np.linalg.norm(LIGHT)
+# Screen lift per unit of height, matching the 55-degree camera the sprites are rendered with.
+OBLIQUE = math.cos(math.radians(55))
 
 
 # ---- Noise ----------------------------------------------------------------------------------
@@ -83,6 +85,7 @@ class Canvas:
         self.S = np.zeros((self.h, self.w), np.float32)
         self.E = np.zeros((self.h, self.w, 3), np.float32)
         self.y, self.x = np.mgrid[0:self.h, 0:self.w].astype(np.float32)
+        self.ground = 0.0       # height of the playing surface (unlifted in the oblique view)
 
     def paint(self, mask, albedo=None, height=None, spec=None, emit=None, mode='set'):
         """Writes the given layers where `mask` (0..1) is set; `mode='add'` adds to the height."""
@@ -160,6 +163,48 @@ class Canvas:
         if self.E.max() > 0:
             rgb += blur(self.E, 10) * 0.6
         return (np.clip(rgb, 0, 1) ** (1 / 1.1) * 255).round().astype(np.uint8)
+
+
+    def project(self, rgb, ground=0.0):
+        """Re-draws a shaded top-down image in the sprites' oblique view: heights above `ground`
+        lift surfaces up the screen and the south-facing sides that rise become visible."""
+        rel = (self.H - ground) * OBLIQUE
+        h, w = rel.shape
+        best = np.full((h, w), np.iinfo(np.int32).min, np.int32)
+        for k in range(int(math.floor(min(rel.min(), 0))), int(math.ceil(max(rel.max(), 0))) + 1):
+            # Source row Y + k reaches screen row Y when its lifted top is at or above Y.
+            src = np.full((h, w), -np.inf, np.float32)
+            lo, hi = max(0, -k), min(h, h - k)
+            if lo < hi:
+                src[lo:hi] = rel[lo + k:hi + k]
+            best = np.where(src >= k, k, best)
+        rows = np.arange(h)[:, None]
+        best = np.where(best == np.iinfo(np.int32).min, 0, best)
+        sy = rows + best
+        sx = np.broadcast_to(np.arange(w)[None, :], (h, w))
+        self.src = (sy, sx)
+        out = rgb[sy, sx].astype(np.float32)
+        below = rel[sy, sx] - best                 # px down from the top edge of that surface
+        # Small gaps come from slopes (stretch the surface over them); big ones are walls.
+        face = np.clip((below - 2.5) / 2.0, 0, 1)[..., None]
+        lit = 0.62 - 0.22 * np.clip(below / 60, 0, 1)
+        # Sides take the surface's average colour so bevels and trim don't streak down them.
+        side = blur(self.A, 8)[sy, sx] * lit[..., None] * 255
+        side = (np.clip(side / 255, 0, 1) ** (1 / 1.1)) * 255
+        out = out * (1 - face) + side * face
+        return out.round().clip(0, 255).astype(np.uint8)
+
+    def remap(self, a):
+        """Moves a per-pixel map (mask or overlay) into the view made by the last `project`."""
+        return a[self.src]
+
+    def render(self):
+        return self.project(self.shade(), self.ground)
+
+
+def north_lift(height):
+    """Extra depth for a wall on the north edge so its top is not lifted off the map."""
+    return round(height * OBLIQUE)
 
 
 def tile_center(tx, ty):
@@ -285,9 +330,12 @@ def basic_level():
     c.H = c.H * (1 - water) + (-8 + ripple * 1.5) * water
     c.paint(water, albedo=mix((0.08, 0.24, 0.36), (0.03, 0.11, 0.21), depth), spec=0.9)
 
-    # East bulkhead wall with blue lights, open at the exit (row 6).
+    # East bulkhead wall with blue lights, open at the exit (row 6). Everything stays inside the
+    # unbuildable border column; pieces south of the opening start lower so that, once their tops
+    # are lifted by the oblique view, the opening still lines up with row 6.
     wx = EAST_WALL_X * PPU
-    gap = (c.y > 6 * T + 6) & (c.y < 7 * T - 6)
+    border = 19 * T
+    gap = (c.y > 6 * T + 6) & (c.y < 7 * T - 6 + round(72 * OBLIQUE))
     wall_m, wall_in = c.rect(wx, -10, c.w + 10, c.h + 10, 2)
     c.block((wall_m * ~gap, wall_in), 64, 10, (0.36, 0.38, 0.43), 0.6)
     for k in range(12):
@@ -330,14 +378,14 @@ def basic_level():
     track = (np.mod(c.x - wx, 22) < 4) * tunnel
     c.paint(track * (1 - fade) * 0.6, albedo=(0.08, 0.08, 0.1))
     for sgn, yy in ((-1, gy0), (1, gy1)):
-        cy = yy + sgn * 40
-        tower = c.rrect(wx - 56, cy - 38, c.w + 10, cy + 38, 12)
+        cy = yy + sgn * 40 + (round(100 * OBLIQUE) if sgn > 0 else 0)
+        tower = c.rrect(border + 2, cy - 38, c.w + 10, cy + 38, 12)
         c.block(tower, 92, 8, (0.42, 0.45, 0.5), 0.7)
-        cap = c.rrect(wx - 44, cy - 26, wx + 40, cy + 26, 10)
+        cap = c.rrect(border + 10, cy - 26, wx + 40, cy + 26, 10)
         c.block(cap, 104, 5, (0.3, 0.32, 0.36), 0.6)
         vent = (np.mod(c.x - wx, 14) < 6) * c.rect(wx + 56, cy - 18, c.w - 12, cy + 18, 1)[0]
         c.paint(vent * 0.8, albedo=(0.2, 0.21, 0.24))
-        lamp = c.disc(wx - 2, cy, 11)[0]
+        lamp = c.disc(border + 24, cy, 10)[0]
         c.paint(lamp, albedo=(0, 0, 0), emit=(0.25, 0.55, 1.0))
     # Door slot in the tunnel mouth and a lit strip overhead.
     c.paint(c.rect(wx + 12, gy0 + 2, wx + 18, gy1 - 2, 1)[0], albedo=(0.55, 0.45, 0.12))
@@ -348,6 +396,7 @@ def basic_level():
         lamp = c.disc(16, yy, 6)[0]
         c.paint(lamp, albedo=(0, 0, 0), emit=(0.35, 1.0, 0.45))
     c.water_mask = water
+    c.ground = 3  # height of the playing surface
     return c
 
 
@@ -410,7 +459,7 @@ def cross_level():
     c.H += tuft * 4
     # Crumbled walls along the north and south edges, open at the gates.
     gates = gate_mask(c, [774, 262, 522, 1034], 0.6)
-    for y0, y1 in ((0, T * 0.34), (c.h - T * 0.34, c.h)):
+    for y0, y1 in ((0, T * 0.34 + north_lift(48)), (c.h - T * 0.34, c.h)):
         wall = c.rect(-10, y0, c.w + 10, y1, 3)
         rough = fbm(c.w, c.h, 30, 17, 3)
         m = wall[0] * (1 - gates) * smoothstep(0.2, 0.5, rough + 0.2)
@@ -422,6 +471,7 @@ def cross_level():
         c.block(col, 46, 8, (0.62, 0.52, 0.36), 0.15)
         ring = c.disc(tx * T, ty * T, T * 0.15, 2)
         c.paint(ring[0], albedo=(0.5, 0.41, 0.28))
+    c.ground = 5  # height of the playing surface
     return c
 
 
@@ -481,7 +531,7 @@ def threeway_level():
                 l = c.disc(tx * T + T / 2, yy, 3.5)[0]
                 c.paint(l, albedo=(0, 0, 0), emit=(0.3, 0.6, 1.0))
     # Machinery walls on the north and south edges.
-    for y0, y1 in ((0, T * 0.3), (c.h - T * 0.3, c.h)):
+    for y0, y1 in ((0, T * 0.3 + north_lift(40)), (c.h - T * 0.3, c.h)):
         wall = c.rect(-10, y0, c.w + 10, y1, 2)
         c.block(wall, 34, 6, (0.22, 0.23, 0.26), 0.5)
         for tx in range(20):
@@ -489,7 +539,7 @@ def threeway_level():
             c.block(box_, 40, 4, (0.3, 0.32, 0.36), 0.6)
             lamp = c.disc(tx * T + T / 2, (y0 + y1) / 2, 5)[0]
             c.paint(lamp, albedo=(0, 0, 0), emit=((0.3, 1.0, 0.4) if tx % 3 else (1.0, 0.3, 0.2)))
-    hz = np.maximum(c.rect(0, T * 0.3, c.w, T * 0.42, 1)[0], c.rect(0, c.h - T * 0.42, c.w, c.h - T * 0.3, 1)[0])
+    hz = np.maximum(c.rect(0, T * 0.3 + north_lift(40), c.w, T * 0.42 + north_lift(40), 1)[0], c.rect(0, c.h - T * 0.42, c.w, c.h - T * 0.3, 1)[0])
     hazard(c, hz)
     # Gate frames on the side walls.
     for code in (771, 774, 777, 259, 262, 265):
@@ -499,6 +549,7 @@ def threeway_level():
             post = c.rect(x0, yy, x0 + 22, yy + 14, 1.5)
             c.block(post, 30, 3, (0.2, 0.21, 0.24), 0.5)
         hazard(c, c.rect(x0, row * T + 18, x0 + 22, (row + 1) * T - 18, 1)[0])
+    c.ground = 3  # height of the playing surface
     return c
 
 
@@ -510,6 +561,8 @@ COURTYARD_ARCHES = [  # (sprite id, x, y, w, h) in world px, from maps.ts
     ('courtyard_sw_overlay', (70 * 17) // 4 + 3, 70 * 11 + 3, 45, 65),
     ('courtyard_se_overlay', 70 * 15 + 2, 70 * 11 + 3, 45, 65),
 ]
+COURT_NORTH = T * 0.36 + round(48 * OBLIQUE)
+ARCH_LIFT = 20   # world px the lintel tops rise in the oblique view (see maps.ts overlays)
 
 
 def courtyard_level():
@@ -543,7 +596,7 @@ def courtyard_level():
         c.block(hedge, 40, 14, palette_map(leaf, [(0, (0.06, 0.2, 0.06)), (1, (0.2, 0.45, 0.14))]), 0.05)
         c.H += hedge[0] * leaf * 5
     # Perimeter colonnade wall (north & south), gatehouses at the four gate columns.
-    for y0, y1 in ((0, T * 0.36), (c.h - T * 0.36, c.h)):
+    for y0, y1 in ((0, COURT_NORTH), (c.h - T * 0.36, c.h)):
         wall = c.rect(-10, y0, c.w + 10, y1, 2)
         c.block(wall, 38, 5, (0.5, 0.54, 0.6), 0.3)
         for tx in range(20):
@@ -553,12 +606,12 @@ def courtyard_level():
             c.paint(lamp, albedo=(0, 0, 0), emit=(1.0, 0.85, 0.5))
     # Open the gates (N4, N10, N15; S4, S10, S15) and the side gates (W6, E6).
     for col in (4, 10, 15):
-        for y0, y1 in ((0, T * 0.36), (c.h - T * 0.36, c.h)):
+        for y0, y1 in ((0, COURT_NORTH), (c.h - T * 0.36, c.h)):
             g = c.rect(col * T + 8, y0 - 2, (col + 1) * T - 8, y1 + 2, 2)[0]
             c.H = c.H * (1 - g) + 3 * g
             c.paint(g, albedo=(0.36, 0.4, 0.46))
     for x0, x1 in ((0, T * 0.36), (c.w - T * 0.36, c.w)):
-        wall = c.rect(x0, T * 0.36, x1, c.h - T * 0.36, 2)
+        wall = c.rect(x0, COURT_NORTH, x1, c.h - T * 0.36, 2)
         c.block(wall, 30, 5, (0.5, 0.54, 0.6), 0.3)
         g = c.rect(x0 - 2, 6 * T + 8, x1 + 2, 7 * T - 8, 2)[0]
         c.H = c.H * (1 - g) + 3 * g
@@ -575,6 +628,7 @@ def courtyard_level():
         c.paint(gem, albedo=(0, 0, 0), emit=(0.3, 0.7, 1.0))
         arch = np.maximum(arch, span[0])
     c.overlay_mask = arch
+    c.ground = 3  # height of the playing surface
     return c
 
 
@@ -611,6 +665,7 @@ def mixer_level():
     c.paint(m * seg, albedo=(0, 0, 0), emit=(0.7, 0.3, 1.0))
     inner = smoothstep(0.45, 0.5, frame) * (1 - smoothstep(0.5, 0.56, frame))
     c.paint(inner, emit=(0.8, 0.4, 1.0))
+    c.ground = 0  # height of the playing surface
     return c
 
 
@@ -632,6 +687,8 @@ def vr_tile(kind, tw=1, th=1, side=None):
             arrow = c.disc(c.w / 2, c.h / 2, 10)[0]
             c.paint(arrow, emit=col * 0.6)
         else:
+            lift = round(30 * OBLIQUE)
+            c.y = 8 + (c.y - 8 - lift) * (c.h - 16) / (c.h - 16 - lift)
             outer = c.rrect(8, 8, c.w - 8, c.h - 8, 6)
             c.block(outer, 30, 18, col * 0.18, 0.9)
             face = c.rrect(26, 26, c.w - 26, c.h - 26, 4)[0]
@@ -718,6 +775,7 @@ def roadway_level():
     # Gate markers north and south (column 4).
     for y0 in (0, c.h - 16):
         hazard(c, c.rect(4 * T + 6, y0, 5 * T - 6, y0 + 16, 1)[0], 16)
+    c.ground = 23  # height of the playing surface
     return c
 
 
@@ -770,6 +828,7 @@ def skytower_level():
         crenel = (np.mod(c.x + c.y, 46) < 23).astype(np.float32)
         top = c.rrect(x * T + 18, y * T + 18, (x + w) * T - 18, (y + h) * T - 18, 8)[0]
         c.H += top * crenel * 8
+    c.ground = 63  # height of the playing surface
     return c
 
 
@@ -795,7 +854,7 @@ class _Draw:
     def __call__(self, w, h):
         if self.kind == 'vr':
             c = vr_tile(*self.args)
-            rgb = c.shade()
+            rgb = c.render()
             return np.dstack([rgb, np.full(rgb.shape[:2], 255, np.uint8)])
         if self.kind == 'water':
             (x0, y0, x1, y1), t = self.args
@@ -817,7 +876,7 @@ def courtyard_overlay_source():
     global _COURT
     if _COURT is None:
         c = courtyard_level()
-        _COURT = (c.shade(), c.overlay_mask)
+        _COURT = (c.render(), c.remap(c.overlay_mask))
     return _COURT
 
 
@@ -829,9 +888,10 @@ def water_source():
     """All water overlay frames for the Basic map (full map size, computed once per process)."""
     global _WATER
     if _WATER is None:
-        c = Canvas(20, 12)
+        c = basic_level()
+        c.project(np.zeros((c.h, c.w, 3), np.uint8), c.ground)    # just the view mapping
         water = basic_water_mask(c)
-        _WATER = [water_frame(c, water, f / WATER_FRAMES) for f in range(WATER_FRAMES)]
+        _WATER = [c.remap(water_frame(c, water, f / WATER_FRAMES)) for f in range(WATER_FRAMES)]
     return _WATER
 
 
@@ -856,7 +916,9 @@ def sprite_sheets():
     s['water_side'] = dict(size=(sx1 - sx0, sy1 - sy0), frames=[
         dict(draw=_Draw('water', WATER_SIDE, f / WATER_FRAMES)) for f in range(WATER_FRAMES)])
     for sid, x, y, w, h in COURTYARD_ARCHES:
-        s[sid] = dict(size=(w, h), frames=[dict(draw=_Draw('court', sid, x, y, w, h))])
+        # The sprite also covers the lintel's lifted top, above its footprint.
+        top = max(0, y - ARCH_LIFT)
+        s[sid] = dict(size=(w, h + y - top), frames=[dict(draw=_Draw('court', sid, x, top, w, h + y - top))])
     return s
 
 
@@ -864,7 +926,7 @@ def main():
     ids = sys.argv[1:] or list(LEVELS)
     out = os.path.join(ROOT, 'assets', 'levels')
     for lid in ids:
-        rgb = LEVELS[lid]().shade()
+        rgb = LEVELS[lid]().render()
         Image.fromarray(rgb).save(os.path.join(out, f'{lid}.jpg'), quality=88, optimize=True, progressive=True)
         print('saved', lid, rgb.shape)
 
