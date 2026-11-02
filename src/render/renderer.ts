@@ -7,11 +7,11 @@
 import type { SkCanvas, SkFont, SkImage, SkPaint } from '@shopify/react-native-skia';
 import { BlendMode, PaintStyle, Skia } from '@shopify/react-native-skia';
 
-import { GRID, GRID_HALF, SUB_SHIFT } from '@/engine/constants';
+import { GRID, GRID_HALF, JAM_RADIUS, SUB_SHIFT } from '@/engine/constants';
 import { PROJECTILES } from '@/engine/data/projectiles';
 import type { SpriteId } from '@/engine/data/sprites';
 import { frameRect, SPRITES } from '@/engine/data/sprites';
-import { EXPLOSION_SPRITES } from '@/engine/effects';
+import { EXPLOSION_SPRITES, JAM_PULSE_TICKS } from '@/engine/effects';
 import { ENEMIES, enemyDeathFrames, enemyFrame } from '@/engine/enemies';
 import type { Enemy, Tower } from '@/engine/entities';
 import type { GameState } from '@/engine/gameState';
@@ -54,12 +54,23 @@ const HEALTH_FILL = rgba(255, 48, 48);
 const ELITE_GLOW = rgba(255, 200, 60);
 const MONEY_COLOR = rgba(255, 230, 0);
 const SHADOW = rgba(0, 0, 0);
+const JAM_COLOR = rgba(120, 230, 255);
+/** Sparks crawling over a jammed tower. */
+const JAM_ARCS = 3;
+const JAM_ARC_SEGMENTS = 3;
+const JAM_ARC_STEP = 9;
 
 /** Turret direction shown on placement previews (pointing down-screen). */
 const PREVIEW_ANGLE = 270;
 
 /** Flame sprite geometry inside an enemy's footprint (from the original draw maths). */
 const EFFECT_WIDTH = GRID - 2;
+
+/** Repeatable pseudo-random value in [0, 1) for a given integer. */
+const jitter = (n: number) => {
+  const v = Math.sin(n * 12.9898) * 43758.5453;
+  return v - Math.floor(v);
+};
 
 export class WorldRenderer {
   private readonly paint: SkPaint = Skia.Paint();
@@ -69,6 +80,8 @@ export class WorldRenderer {
   private readonly fireSlowPaint: SkPaint;
   private readonly fadePaint: SkPaint = Skia.Paint();
   private readonly strokePaint: SkPaint = Skia.Paint();
+  private readonly jamPaint: SkPaint;
+  private readonly arcPaint: SkPaint = Skia.Paint();
   private font: SkFont | null = null;
   private readonly starfield = new Starfield();
   /** World-space bounds of the screen for the frame being drawn; sprites outside are skipped. */
@@ -82,6 +95,11 @@ export class WorldRenderer {
     this.slowPaint = this.tintPaint(-4128800);
     this.firePaint = this.tintPaint(-128);
     this.fireSlowPaint = this.tintPaint(-4128896);
+    this.jamPaint = this.tintPaint(-8349441);
+    this.arcPaint.setStyle(PaintStyle.Stroke);
+    this.arcPaint.setStrokeWidth(1.6);
+    this.arcPaint.setAntiAlias(true);
+    this.arcPaint.setColor(JAM_COLOR);
     this.strokePaint.setStyle(PaintStyle.Stroke);
     this.strokePaint.setStrokeWidth(3);
     this.strokePaint.setAntiAlias(true);
@@ -151,8 +169,11 @@ export class WorldRenderer {
     canvas.scale(camera.scale, camera.scale);
 
     for (const d of layout.underlays) {
-      const frame = d.frameTicks ? Math.floor(tick / d.frameTicks) % SPRITES[d.sprite].frames : 0;
-      this.drawSprite(canvas, images.sprites, d.sprite, frame, d.x, d.y, this.spritePaint);
+      if (d.frameTicks) {
+        this.drawCrossfaded(canvas, images, d.sprite, tick / d.frameTicks, d.x, d.y);
+      } else {
+        this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
+      }
     }
     for (const t of state.towers) {
       const sprite = t.props.sprite;
@@ -176,6 +197,7 @@ export class WorldRenderer {
     }
 
     this.drawParticles(canvas, state);
+    this.drawJamEffects(canvas, state);
     this.drawExplosions(canvas, state, images);
     this.drawBullets(canvas, state, images);
     this.drawKillPopups(canvas, state, images);
@@ -212,6 +234,24 @@ export class WorldRenderer {
     );
   }
 
+  /** Draws a looping animation at a fractional frame, blending the two frames either side of it. */
+  private drawCrossfaded(
+    canvas: SkCanvas,
+    images: GameImages,
+    id: SpriteId,
+    position: number,
+    x: number,
+    y: number,
+  ): void {
+    const { frames } = SPRITES[id];
+    const frame = Math.floor(position);
+    const mix = position - frame;
+    this.fadePaint.setAlphaf(1 - mix);
+    this.drawSprite(canvas, images.sprites, id, frame % frames, x, y, this.fadePaint);
+    this.fadePaint.setAlphaf(mix);
+    this.drawSprite(canvas, images.sprites, id, (frame + 1) % frames, x, y, this.fadePaint);
+  }
+
   /** Towers' turrets and enemies, sorted so lower objects overlap higher ones. */
   private drawUnitsAndTurrets(canvas: SkCanvas, input: RenderInput): void {
     const { state } = input;
@@ -244,7 +284,8 @@ export class WorldRenderer {
     if (frame >= 0) {
       const x = t.gridX * GRID;
       const y = t.gridY * GRID - p.towerHeight;
-      this.drawSprite(canvas, input.images.sprites, p.sprite, frame, x, y, this.spritePaint);
+      const paint = input.state.tick < t.jammedUntil ? this.jamPaint : this.spritePaint;
+      this.drawSprite(canvas, input.images.sprites, p.sprite, frame, x, y, paint);
     }
   }
 
@@ -350,6 +391,43 @@ export class WorldRenderer {
         ),
         this.paint,
       );
+    }
+  }
+
+  /** Arc Crawler pulses and the sparks on the towers they jammed. */
+  private drawJamEffects(canvas: SkCanvas, state: GameState): void {
+    const { tick } = state;
+    for (const p of state.jamPulses) {
+      const age = (tick - p.tick) / JAM_PULSE_TICKS;
+      this.strokePaint.setColor(JAM_COLOR);
+      this.strokePaint.setAlphaf(1 - age);
+      canvas.drawCircle(p.x, p.y, JAM_RADIUS * (0.15 + 0.85 * age), this.strokePaint);
+      this.paint.setColor(JAM_COLOR);
+      this.paint.setAlphaf(0.18 * (1 - age));
+      canvas.drawCircle(p.x, p.y, JAM_RADIUS * (0.15 + 0.85 * age), this.paint);
+    }
+    this.paint.setAlphaf(1);
+    for (const t of state.towers) {
+      if (tick >= t.jammedUntil) {
+        continue;
+      }
+      const cx = t.gridX * GRID + GRID_HALF;
+      const cy = t.gridY * GRID + GRID_HALF - t.props.towerHeight;
+      // The bolts jump to a new shape every other tick.
+      const seed = (tick >> 1) * 31 + t.gridX * 7 + t.gridY * 13;
+      for (let arc = 0; arc < JAM_ARCS; arc++) {
+        let angle = jitter(seed + arc) * Math.PI * 2;
+        let x = cx;
+        let y = cy;
+        for (let s = 0; s < JAM_ARC_SEGMENTS; s++) {
+          angle += (jitter(seed + arc * 5 + s * 11) - 0.5) * 2;
+          const nx = x + Math.cos(angle) * JAM_ARC_STEP;
+          const ny = y + Math.sin(angle) * JAM_ARC_STEP;
+          canvas.drawLine(x, y, nx, ny, this.arcPaint);
+          x = nx;
+          y = ny;
+        }
+      }
     }
   }
 

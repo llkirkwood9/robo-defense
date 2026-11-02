@@ -48,11 +48,6 @@ const SECTIONS: { title: string; rows: OptionRow[] }[] = [
         title: 'Stop fast-forward between waves',
         detail: 'Return to normal speed when a wave is cleared.',
       },
-      {
-        key: 'ffPausesOnLifeLoss',
-        title: 'Pause fast-forward on life loss',
-        detail: 'Pause the game if a robot gets through while fast-forwarding.',
-      },
     ],
   },
 ];

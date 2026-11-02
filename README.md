@@ -97,11 +97,14 @@ These numbers were tuned against it. They intentionally differ from the original
 
 ## Added features
 
+- **Arc Crawler.** A new robot from wave 12: a crab whose coil jams towers within 2.5 tiles for 2
+  seconds. Jammed towers stay immune for 2 seconds afterwards, so crawlers can't lock them down.
 - **Elite robots.** The first robot of every 10th wave has 5× hit points and pays 5× cash.
 - **Send the next wave early.** Once a wave has finished spawning, a HUD button (or `N` on the web)
-  starts the next one for extra cash.
-- **Upgrade all.** The upgrade panel can upgrade every tower of the same type as far as money
-  allows, which also re-arms all mines and teleporters at once.
+  starts the next one and pays twice the clear bonus on the spot.
+- **Upgrade all.** The upgrade panel can upgrade every tower of the same type when money covers
+  all of them, which also re-arms all mines and teleporters at once.
+- **Scroll to zoom.** On the web, the mouse wheel or a trackpad pinch zooms around the cursor.
 - **Game stats.** The end-of-game card shows robots destroyed, towers built and lives lost.
 - **Difficulty warning.** The new-game screen warns when a difficulty is well above your best win.
 

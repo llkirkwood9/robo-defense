@@ -81,6 +81,7 @@ export const SPRITES = {
   bomber: strip(105, 175, 32),
   titan: strip(70, 140, 40),
   mothership: strip(105, 151, 32),
+  arc_crawler: squares(70, 64),
 
   // Projectiles: one frame, or 32 directional frames.
   bullet_small: squares(35, 1),
@@ -97,9 +98,9 @@ export const SPRITES = {
   fire: squares(35, 25),
 
   // Map decorations.
-  water_bottom_e: strip(670, 50, 12),
-  water_bottom_w: strip(670, 50, 12),
-  water_side: strip(56, 290, 12),
+  water_bottom_e: strip(670, 50, 16),
+  water_bottom_w: strip(670, 50, 16),
+  water_side: strip(56, 290, 16),
   courtyard_ne_overlay: strip(32, 63, 1),
   courtyard_nw_overlay: strip(32, 63, 1),
   courtyard_se_overlay: strip(45, 85, 1),

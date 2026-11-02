@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -65,7 +65,10 @@ const INSTRUCTIONS: {
     text: 'Drag towers from the dock onto the map. Towers can reshape the path, but never block it.',
   },
   { icon: 'upgrade', text: 'Tap a tower to upgrade or sell it.' },
-  { icon: 'fastForward', text: 'Drag to scroll, pinch to zoom. Fast-forward when ready.' },
+  {
+    icon: 'fastForward',
+    text: `Drag to move, ${Platform.OS === 'web' ? 'scroll' : 'pinch'} to zoom. Fast-forward when ready.`,
+  },
   { icon: 'money', text: 'Cleared waves pay cash. Send waves early for more.' },
   { icon: 'star', text: 'Every 10th wave brings a golden Elite: 5× HP, 5× cash.' },
 ];

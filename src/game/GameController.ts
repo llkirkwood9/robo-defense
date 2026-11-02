@@ -71,7 +71,7 @@ export interface HudState {
   score: number;
   bonus: number;
   runState: RunState;
-  /** Extra cash for sending the next wave early, or null when no wave can be sent. */
+  /** Cash paid for sending the next wave early, or null when no wave can be sent. */
   callWaveBonus: number | null;
   /** Tower whose upgrade panel is open. */
   selected: Tower | null;
@@ -152,7 +152,6 @@ export class GameController {
         const o = profileStore.get().options;
         return {
           ffStopsBetweenLevels: o.ffStopsBetweenLevels,
-          ffPausesOnLifeLoss: o.ffPausesOnLifeLoss,
         };
       },
       emit: (event) => this.onGameEvent(event),
@@ -495,7 +494,7 @@ export class GameController {
     this.invalidate();
   }
 
-  /** Persists the zoom level when a pinch ends. */
+  /** Persists the zoom level when a pinch or scroll ends. */
   commitZoom(): void {
     writeZoom(this.camera.scale);
   }
@@ -538,7 +537,7 @@ export class GameController {
     this.syncHud();
   }
 
-  /** Buys `type` for the selected tower and every other tower like it, as far as money allows. */
+  /** Buys `type` for the selected tower and every other tower like it, if money covers them all. */
   upgradeAllLikeSelected(type: TowerType): void {
     const tower = this.hud.get().selected;
     if (!tower) {

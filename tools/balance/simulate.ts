@@ -300,7 +300,7 @@ function play(
       dequeueEarned: () => undefined,
       flush: () => {},
     } as unknown as GameServices['achievements'],
-    options: { ffStopsBetweenLevels: false, ffPausesOnLifeLoss: false },
+    options: { ffStopsBetweenLevels: false },
     emit: (e) => {
       if (e.type === 'gameOver') over = e;
     },

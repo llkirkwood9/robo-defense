@@ -361,6 +361,61 @@ def titan(phase):
     return scene
 
 
+# ---- Arc Crawler: squat crab with a crackling coil on its back ----------------------------------
+
+def arc_crawler(phase):
+    """Six-legged crab (teal shell, bronze legs) walking in a tripod gait; the coil's orb pulses."""
+    t = phase * TAU
+    pulse = 0.5 + 0.5 * math.cos(t)
+    snap = 0.6 + 0.4 * math.sin(t * 2)
+
+    def scene(p):
+        body_z = 10 + abs(math.sin(t)) * 0.6
+        parts = []
+        for side in (-1, 1):
+            for i, ly in enumerate((7.5, 0.0, -7.5)):
+                # Tripod gait: a side's front and back legs step with the other side's middle leg.
+                ph = t + (math.pi if (i % 2 == 0) == (side > 0) else 0)
+                hip = np.array([side * 7, ly * 0.8, body_z - 1])
+                foot = np.array([side * 17.5, ly * 1.35 + math.sin(ph) * 3.2, 0.9 + max(0.0, math.cos(ph)) * 3.5])
+                knee = (hip + foot) / 2 + [side * 1.5, 0, 7]
+                parts.append((capsule(p, hip, knee, 1.6), M['gunmetal']))
+                parts.append((capsule(p, knee, foot, 1.4, 0.6), M['bronze']))
+                parts.append((sphere(p, knee, 1.9), M['steel']))
+            # Claw: an arm reaching forward and two pincers that snap open and shut.
+            shoulder = np.array([side * 8, 7.5, body_z])
+            wrist = np.array([side * 11.5, 14, body_z - 1])
+            parts.append((capsule(p, shoulder, wrist, 1.5), M['gunmetal']))
+            parts.append((sphere(p, wrist, 2.5), M['teal']))
+            for finger in (-1, 1):
+                tip = wrist + [finger * 2.8 * snap, 6, 0]
+                parts.append((capsule(p, wrist, tip, 1.5, 0.5), M['bronze']))
+            # Eye on a stalk.
+            parts.append((capsule(p, (side * 2.6, 9, body_z + 2), (side * 3.2, 12.5, body_z + 5.5), 0.6), M['steel']))
+            parts.append((sphere(p, (side * 3.2, 12.5, body_z + 5.8), 1.3), M['l_amber']))
+        # Shell.
+        parts.append((ellipsoid(p, (0, 0, body_z - 2), (8.5, 10.5, 3.5)), M['gunmetal']))
+        parts.append((ellipsoid(p, (0, 0, body_z), (10.5, 11.5, 5)), M['teal']))
+        parts.append((torus_z(p, 0, 0, body_z + 0.8, 10, 0.8), M['gold']))
+        # Coil: a mast through three shrinking rings, with an orb on top and arcs running down.
+        cy = -2
+        top = np.array([0, cy, body_z + 19])
+        parts.append((cyl(p, 0, cy, 4.5, body_z + 3.5, body_z + 6, 0.5), M['gunmetal']))
+        parts.append((tube(p, (0, cy, body_z + 5), (0, cy, body_z + 17), 1.1), M['steel']))
+        for ring, radius in ((8, 4.4), (11, 3.6), (14, 2.8)):
+            parts.append((torus_z(p, 0, cy, body_z + ring, radius, 0.85), M['gold']))
+        parts.append((sphere(p, top, 2.9 + 0.5 * pulse), M['l_cyan']))
+        for a in range(3):
+            ang = a * TAU / 3 + t
+            kink = math.sin(t * 3 + a * 2) * 1.6
+            mid = top + [math.cos(ang) * 3.5, math.sin(ang) * 3.5 + kink, -5]
+            end = np.array([math.cos(ang) * 4.8, cy + math.sin(ang) * 4.8, body_z + 8])
+            parts.append((capsule(p, top, mid, 0.35), M['l_cyan']))
+            parts.append((capsule(p, mid, end, 0.3), M['l_cyan']))
+        return parts
+    return scene
+
+
 # ---- Sheets ------------------------------------------------------------------------------------
 
 def unit_sheet(size, model, frames_per_dir, cam, shadow=0.35, radius=24, post=None, scale=1.0):
@@ -417,6 +472,7 @@ def sheets():
         'helicopter': flyer_sheet((105, 175), helicopter, 6, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.25),
         'jet': flyer_sheet((105, 175), jet, 6, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.35),
         'bomber': flyer_sheet((105, 175), bomber, 8, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.32),
+        'arc_crawler': unit_sheet((70, 70), arc_crawler, 16, ground, radius=30, scale=1.25),
         'mothership': flyer_sheet((105, 151), mothership, 8, dict(fw=105, fh=151, ox=52.5, oy=40, elev=UNIT_ELEV), 70, 1.15),
     }
     return s

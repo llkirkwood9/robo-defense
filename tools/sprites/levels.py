@@ -425,9 +425,10 @@ def water_frame(c, water, t):
     """Moving glints and lapping foam over the water, as an RGBA overlay; t in [0, 1)."""
     x, y = c.x, c.y
     k = math.tau
-    w1 = np.sin(x / 31.0 + y / 9.0 - k * t * 2) * np.sin(x / 17.0 - y / 23.0 + k * t)
-    w2 = np.sin(x / 13.0 - y / 7.0 + k * t * 3) * np.sin(y / 11.0 + k * t * 2)
-    w3 = np.sin(x / 7.0 + y / 5.0 - k * t * 4)
+    # One or two cycles per loop, so each frame moves little and the game's crossfade stays smooth.
+    w1 = np.sin(x / 31.0 + y / 9.0 - k * t) * np.sin(x / 17.0 - y / 23.0 + k * t)
+    w2 = np.sin(x / 13.0 - y / 7.0 + k * t) * np.sin(y / 11.0 + k * t * 2)
+    w3 = np.sin(x / 7.0 + y / 5.0 - k * t * 2)
     # Sparse, irregular sun glints: interference peaks broken up by static noise.
     grain = fbm(c.w, c.h, 10, 78, 3)
     glint = smoothstep(0.84, 0.98, 0.5 + 0.3 * w1 + 0.25 * w2 + 0.12 * w3 + (grain - 0.5) * 0.5) * water * 0.35
@@ -902,7 +903,7 @@ def courtyard_overlay_source():
 
 
 _WATER = None
-WATER_FRAMES = 12
+WATER_FRAMES = 16
 
 
 def water_source():

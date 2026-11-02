@@ -51,6 +51,9 @@ export function waveClearBonus(level: number): number {
   return 2 + Math.trunc(level / 5);
 }
 
+/** Sending the next wave early pays this many times the clear bonus. */
+export const CALL_WAVE_BONUS_MULTIPLIER = 2;
+
 /** The first robot of every Nth wave is an Elite. */
 export const ELITE_WAVE_INTERVAL = 10;
 export const ELITE_HEALTH_MULTIPLIER = 5;
@@ -60,7 +63,14 @@ export const ELITE_VALUE_MULTIPLIER = 5;
  * Version of the wave generator's rules. A quick save from another version regenerates a different
  * schedule from its seed, so it resumes from the start of its wave.
  */
-export const BALANCE_VERSION = 2;
+export const BALANCE_VERSION = 3;
+
+/** Reach of an Arc Crawler's pulse, in world pixels. */
+export const JAM_RADIUS = GRID * 2.5;
+/** Ticks a pulse stops a tower from firing. */
+export const JAM_TICKS = 60;
+/** Ticks after a jam ends during which a tower ignores pulses, so crawlers can't lock it down. */
+export const JAM_IMMUNE_TICKS = 60;
 
 /** Hard cap on simultaneously allocated enemies (mothership drops respect it). */
 export const ENEMY_LIMIT = 100;

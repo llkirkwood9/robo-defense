@@ -59,12 +59,15 @@ export interface Obstacle {
   h: number;
 }
 
+/** Ticks per water frame: one loop of the Basic map's water takes about 5 seconds. */
+const WATER_FRAME_TICKS = 9;
+
 /** A sprite drawn at a fixed world position. */
 export interface Decoration {
   sprite: SpriteId;
   x: number;
   y: number;
-  /** Game ticks per animation frame; omitted for a still sprite (frame 0). */
+  /** Game ticks per animation frame (crossfaded); omitted for a still sprite (frame 0). */
   frameTicks?: number;
 }
 
@@ -169,9 +172,9 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     scoreMultiplier: 100,
     // Animated water along the bottom and lower-left edges of the background art.
     underlays: [
-      { sprite: 'water_bottom_w', x: 0, y: GRID * 11 + 20, frameTicks: 8 },
-      { sprite: 'water_bottom_e', x: 670, y: GRID * 11 + 20, frameTicks: 8 },
-      { sprite: 'water_side', x: 0, y: 500, frameTicks: 8 },
+      { sprite: 'water_bottom_w', x: 0, y: GRID * 11 + 20, frameTicks: WATER_FRAME_TICKS },
+      { sprite: 'water_bottom_e', x: 670, y: GRID * 11 + 20, frameTicks: WATER_FRAME_TICKS },
+      { sprite: 'water_side', x: 0, y: 500, frameTicks: WATER_FRAME_TICKS },
     ],
   },
   [MapType.Ruins]: {

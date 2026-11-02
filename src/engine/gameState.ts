@@ -10,6 +10,7 @@ import type { AchievementSink } from './achievements';
 import { Achievement } from './achievements';
 import {
   BALANCE_VERSION,
+  CALL_WAVE_BONUS_MULTIPLIER,
   Dir,
   ELITE_HEALTH_MULTIPLIER,
   ELITE_WAVE_INTERVAL,
@@ -22,8 +23,8 @@ import {
   waveClearBonus,
 } from './constants';
 import type { ShotType } from './data/projectiles';
-import type { Explosion, KillPopup, Particle } from './effects';
-import { KILL_POPUP_TICKS } from './effects';
+import type { Explosion, JamPulse, KillPopup, Particle } from './effects';
+import { JAM_PULSE_TICKS, KILL_POPUP_TICKS } from './effects';
 import type { EnemyState, World } from './entities';
 import { Bullet, Enemy, Tower } from './entities';
 import { ENEMIES, enemyBaseHealth, enemyDeathFrames, EnemyType } from './enemies';
@@ -41,8 +42,6 @@ import { generateWaves, NUM_LEVELS, survivalDifficulty, WaveRunner } from './wav
 export interface GameOptions {
   /** Drop out of fast-forward when a wave is cleared. */
   ffStopsBetweenLevels: boolean;
-  /** Pause when a life is lost during fast-forward. */
-  ffPausesOnLifeLoss: boolean;
 }
 
 /** Choices made on the new-game screen. */
@@ -195,6 +194,7 @@ export class GameState implements World {
   particles: Particle[] = [];
   explosions: Explosion[] = [];
   killPopups: KillPopup[] = [];
+  jamPulses: JamPulse[] = [];
 
   private readonly waves = new WaveRunner();
   private waveSeed = 0;
@@ -243,6 +243,10 @@ export class GameState implements World {
     this.explosions.push(e);
   }
 
+  addJamPulse(p: JamPulse): void {
+    this.jamPulses.push(p);
+  }
+
   dropUnit(type: EnemyType, x: number, y: number, dir: Dir, path: number): void {
     if (this.enemies.length + this.graveyard.length < ENEMY_LIMIT) {
       this.spawnEnemy(type, x, y, dir, path);
@@ -273,14 +277,14 @@ export class GameState implements World {
     return this.waves.pendingGroups();
   }
 
-  /** Extra cash for sending the next wave now, or null when no wave can be sent. */
+  /** Cash paid on the spot for sending the next wave now, or null when no wave can be sent. */
   get callWaveBonus(): number | null {
     const ready =
       this.isRunning &&
       this.waves.waveSpawned &&
       this.enemies.length > 0 &&
       this.levelNum < NUM_LEVELS;
-    return ready ? waveClearBonus(this.levelNum) : null;
+    return ready ? waveClearBonus(this.levelNum) * CALL_WAVE_BONUS_MULTIPLIER : null;
   }
 
   get isActive(): boolean {
@@ -327,6 +331,7 @@ export class GameState implements World {
     this.particles = [];
     this.explosions = [];
     this.killPopups = [];
+    this.jamPulses = [];
     this.targetable = [];
     this.unitCreatedThisLevel = false;
     this.flags = freshFlags();
@@ -387,8 +392,7 @@ export class GameState implements World {
   callNextWave(): void {
     const bonus = this.callWaveBonus;
     if (bonus !== null) {
-      this.setMoney(this.money + bonus);
-      this.nextLevel();
+      this.nextLevel(bonus);
     }
   }
 
@@ -525,20 +529,18 @@ export class GameState implements World {
   }
 
   /**
-   * Upgrades every tower of `from` to `to` while the money lasts (also re-arms all mines and
-   * teleporters). Returns how many were upgraded.
+   * Upgrades every tower of `from` to `to` (also re-arms all mines and teleporters), or none when
+   * the money doesn't cover them all. Returns how many were upgraded.
    */
   upgradeAll(from: TowerType, to: TowerType): number {
-    const cost = this.towerTable.get(to).cost;
-    let count = 0;
-    for (const t of this.towers.filter((tower) => tower.type === from)) {
-      if (cost > this.money) {
-        break;
-      }
-      this.upgradeTower(t, to);
-      count++;
+    const peers = this.towers.filter((tower) => tower.type === from);
+    if (this.towerTable.get(to).cost * peers.length > this.money) {
+      return 0;
     }
-    return count;
+    for (const t of peers) {
+      this.upgradeTower(t, to);
+    }
+    return peers.length;
   }
 
   private sellTower(tower: Tower): void {
@@ -633,9 +635,6 @@ export class GameState implements World {
   }
 
   private loseLife(): void {
-    if (this.runState === RunState.FastForward && this.services.options.ffPausesOnLifeLoss) {
-      this.runState = RunState.Paused;
-    }
     this.health--;
     this.stats.livesLost++;
     this.services.emit({ type: 'lifeLost', health: this.health });
@@ -673,6 +672,7 @@ export class GameState implements World {
     this.particles = this.particles.filter((p) => t < p.firstTick + p.ticks);
     this.explosions = this.explosions.filter((e) => t < e.firstTick + e.frames);
     this.killPopups = this.killPopups.filter((k) => t - k.tick < KILL_POPUP_TICKS);
+    this.jamPulses = this.jamPulses.filter((p) => t - p.tick < JAM_PULSE_TICKS);
   }
 
   private deployUnit(type: EnemyType, path: number): void {
@@ -737,7 +737,8 @@ export class GameState implements World {
     a.increase(Achievement.SeventyFiveK, 1);
   }
 
-  private nextLevel(): void {
+  /** Moves on to the next wave, paying `cash` right away. */
+  private nextLevel(cash = waveClearBonus(this.levelNum)): void {
     const a = this.services.achievements;
     if (this.runState === RunState.FastForward) {
       this.fastForwardCount++;
@@ -758,7 +759,7 @@ export class GameState implements World {
       a.increase(Achievement.Survival10 + this.levelNum / 10 - 1, 1);
     }
 
-    this.setMoney(this.money + waveClearBonus(this.levelNum));
+    this.setMoney(this.money + cash);
     if (!this.waves.nextLevel()) {
       this.endGame(RunState.Won);
     } else {

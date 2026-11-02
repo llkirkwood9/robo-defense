@@ -19,9 +19,11 @@ export enum EnemyType {
   Titan = 9,
   /** The mothership, which drops soldiers as it flies. */
   Dropper = 10,
+  /** A crab carrying a coil whose pulses jam nearby towers. */
+  ArcCrawler = 11,
 }
 
-export const ENEMY_TYPE_COUNT = 11;
+export const ENEMY_TYPE_COUNT = 12;
 
 export interface EnemyProps {
   name: string;
@@ -38,6 +40,8 @@ export interface EnemyProps {
   /** Unit type dropped while flying, or -1. */
   dropType: EnemyType | -1;
   dropDelay: number;
+  /** Ticks between pulses that jam nearby towers, or 0 for robots without a coil. */
+  jamDelay: number;
   /** First level (wave number) this enemy can appear in. */
   firstLevel: number;
   minDifficulty: number;
@@ -71,6 +75,7 @@ interface EnemyDef {
   minDifficulty?: number;
   dropType?: EnemyType;
   dropDelay?: number;
+  jamDelay?: number;
   frameSkip?: number;
   energyBarOffset: number;
   /** [centreX, centreY, visibleWidth, visibleHeight] as ratios of the frame size. */
@@ -220,6 +225,19 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     energyBarOffset: 19,
     shape: [0.5, 0.26, 1.0, 0.5],
   },
+  [EnemyType.ArcCrawler]: {
+    name: 'Arc Crawler',
+    label: 'ARCC',
+    sprite: 'arc_crawler',
+    health: 45,
+    armor: 3,
+    isFlyer: false,
+    speed: 13,
+    value: 6,
+    firstLevel: 12,
+    jamDelay: 120,
+    energyBarOffset: 3,
+  },
 };
 
 function build(def: EnemyDef): EnemyProps {
@@ -238,6 +256,7 @@ function build(def: EnemyDef): EnemyProps {
     value: def.value,
     dropType: def.dropType ?? -1,
     dropDelay: def.dropDelay ?? 0,
+    jamDelay: def.jamDelay ?? 0,
     firstLevel: def.firstLevel,
     minDifficulty: def.minDifficulty ?? 0,
     frameSkip: def.frameSkip ?? 0,

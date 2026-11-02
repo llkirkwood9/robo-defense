@@ -9,6 +9,7 @@ import type { LevelImageId, SpriteId } from '@/engine/data/sprites';
 export const SPRITE_SOURCES: Record<SpriteId, number> = {
   aa_tower: require('@/assets/sprites/aa_tower.png'),
   aa_tower2: require('@/assets/sprites/aa_tower2.png'),
+  arc_crawler: require('@/assets/sprites/arc_crawler.png'),
   artillery: require('@/assets/sprites/artillery.png'),
   bomber: require('@/assets/sprites/bomber.png'),
   bullet_large: require('@/assets/sprites/bullet_large.png'),

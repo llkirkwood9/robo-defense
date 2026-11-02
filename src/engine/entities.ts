@@ -13,6 +13,9 @@ import {
   GRID_HALF,
   GRID_SUB,
   GRID_SUB_HALF,
+  JAM_IMMUNE_TICKS,
+  JAM_RADIUS,
+  JAM_TICKS,
   SUB_SHIFT,
 } from './constants';
 import {
@@ -23,7 +26,7 @@ import {
   ShotType,
   SPLASH_RADIUS_SQ,
 } from './data/projectiles';
-import type { Explosion, Particle } from './effects';
+import type { Explosion, JamPulse, Particle } from './effects';
 import { ExplosionType, explosionSize, makeExplosion } from './effects';
 import { ENEMIES, enemyDropDelay, EnemyType } from './enemies';
 import type { MapLayout } from './maps';
@@ -54,6 +57,7 @@ export interface World {
   readonly effectCount: number;
   addParticle(p: Particle): void;
   addExplosion(e: Explosion): void;
+  addJamPulse(p: JamPulse): void;
   dropUnit(type: EnemyType, x: number, y: number, dir: Dir, path: number): void;
   /** Tower state changed without affecting paths (refreshes upgrade UI). */
   towerChanged(): void;
@@ -142,6 +146,7 @@ export class Enemy implements EnemyState {
   /** A wave leader with more hit points and a bigger bounty. */
   elite = false;
   private dropCounter = 0;
+  private jamCounter = 0;
   readonly flames: Flame[] = Array.from({ length: FLAME_COUNT }, () => new Flame());
 
   static spawn(
@@ -162,6 +167,7 @@ export class Enemy implements EnemyState {
     e.maxHealth = health;
     e.pathNum = path;
     e.dropCounter = enemyDropDelay(type);
+    e.jamCounter = e.props.jamDelay;
     e.teleportTo(x, y, dir);
     return e;
   }
@@ -169,6 +175,7 @@ export class Enemy implements EnemyState {
   static restore(s: EnemyState): Enemy {
     const e = Object.assign(new Enemy(), s);
     e.dropCounter = enemyDropDelay(e.type);
+    e.jamCounter = e.props.jamDelay;
     return e;
   }
 
@@ -271,7 +278,34 @@ export class Enemy implements EnemyState {
         this.dropCounter = enemyDropDelay(this.type);
       }
     }
+    if (this.props.jamDelay > 0) {
+      if (this.jamCounter > 0) {
+        this.jamCounter--;
+      } else if (this.tryJam(world)) {
+        this.jamCounter = this.props.jamDelay;
+      }
+    }
     return this.atExit;
+  }
+
+  /** Pulses if that would jam at least one tower; otherwise holds the charge. */
+  private tryJam(world: World): boolean {
+    const x = this.pixelX + GRID_HALF;
+    const y = this.pixelY + GRID_HALF;
+    let jammed = false;
+    for (const t of world.towers) {
+      const dx = t.gridX * GRID + GRID_HALF - x;
+      const dy = t.gridY * GRID + GRID_HALF - y;
+      if (dx * dx + dy * dy <= JAM_RADIUS * JAM_RADIUS && t.jam(world.tick)) {
+        jammed = true;
+      }
+    }
+    if (jammed) {
+      world.addJamPulse({ tick: world.tick, x, y });
+      // Borrows the ice tower's zap.
+      world.shotFired(ShotType.Slow);
+    }
+    return jammed;
   }
 
   private tryDrop(world: World, grid: MovementGrid): boolean {
@@ -363,6 +397,8 @@ export class Tower {
   targetMode: TargetMode | null = null;
   /** Inside a Command Tower's aura (longer range). */
   boosted = false;
+  /** Tick an Arc Crawler's jam wears off. */
+  jammedUntil = 0;
 
   constructor(
     readonly gridX: number,
@@ -400,8 +436,20 @@ export class Tower {
     this.lastDirection = 270;
   }
 
+  /** Stops the tower firing for a while. Returns false if it has no weapon or is still immune. */
+  jam(tick: number): boolean {
+    if (this.props.shotType === ShotType.None || tick < this.jammedUntil + JAM_IMMUNE_TICKS) {
+      return false;
+    }
+    this.jammedUntil = tick + JAM_TICKS;
+    return true;
+  }
+
   /** Runs one tick. Returns a new projectile when the tower fires one. */
   update(world: World, targets: readonly Enemy[]): Bullet | null {
+    if (world.tick < this.jammedUntil) {
+      return null;
+    }
     const p = this.props;
     this.shotDelay--;
     if (this.shotDelay > 0) {

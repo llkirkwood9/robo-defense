@@ -46,6 +46,15 @@ export interface Explosion {
 }
 
 /** "$N" text that floats up from a destroyed enemy. */
+/** An expanding ring showing an Arc Crawler's pulse. */
+export interface JamPulse {
+  tick: number;
+  x: number;
+  y: number;
+}
+
+export const JAM_PULSE_TICKS = 15;
+
 export interface KillPopup {
   tick: number;
   /** Cash the kill paid. */

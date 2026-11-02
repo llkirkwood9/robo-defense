@@ -279,17 +279,16 @@ export function UpgradePanel({ controller }: { controller: GameController }) {
                   />
                 ))}
                 {peers > 1 &&
-                  upgrades
-                    .filter((u) => money >= table.get(u).cost)
-                    .map((u) => (
-                      <GlassButton
-                        key={u}
-                        label={`All ${peers} → ${table.get(u).label} · $${table.get(u).cost * peers}`}
-                        size="sm"
-                        style={styles.allButton}
-                        onPress={() => controller.upgradeAllLikeSelected(u)}
-                      />
-                    ))}
+                  upgrades.map((u) => (
+                    <GlassButton
+                      key={u}
+                      label={`All ${peers} → ${table.get(u).label} · $${table.get(u).cost * peers}`}
+                      size="sm"
+                      disabled={money < table.get(u).cost * peers}
+                      style={styles.allButton}
+                      onPress={() => controller.upgradeAllLikeSelected(u)}
+                    />
+                  ))}
               </View>
             ) : (
               <View style={styles.maxed}>
