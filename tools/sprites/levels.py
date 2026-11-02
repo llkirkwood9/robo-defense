@@ -183,15 +183,33 @@ class Canvas:
         sy = rows + best
         sx = np.broadcast_to(np.arange(w)[None, :], (h, w))
         self.src = (sy, sx)
-        out = rgb[sy, sx].astype(np.float32)
-        below = rel[sy, sx] - best                 # px down from the top edge of that surface
-        # Small gaps come from slopes (stretch the surface over them); big ones are walls.
-        face = np.clip((below - 2.5) / 2.0, 0, 1)[..., None]
-        lit = 0.62 - 0.22 * np.clip(below / 60, 0, 1)
-        # Sides take the surface's average colour so bevels and trim don't streak down them.
-        side = blur(self.A, 8)[sy, sx] * lit[..., None] * 255
-        side = (np.clip(side / 255, 0, 1) ** (1 / 1.1)) * 255
-        out = out * (1 - face) + side * face
+        sy1 = np.minimum(sy + 1, h - 1)
+        # Screen rows of this source row's top and the next one's: the span between them is
+        # either a gentle slope (a pixel or so) or the front of something tall.
+        t0 = sy - rel[sy, sx]
+        t1 = sy1 + (sy1 == sy) - rel[sy1, sx]
+        gap = np.maximum(t1 - t0, 1e-3)
+        f = np.clip((rows + 0.5 - t0) / gap, 0, 1)
+        f = f * smoothstep(1.2, 2.0, gap)            # flat ground keeps its own pixels
+        top = rgb[sy, sx].astype(np.float32) * (1 - f[..., None]) + rgb[sy1, sx] * f[..., None]
+        face = smoothstep(1.5, 4.0, gap)[..., None]
+        # Fronts are lit from their outline's real direction (smoothed slope of the height
+        # field), with the colour from just inside the edge and a screen-space grain, so
+        # nothing is smeared down from the top row.
+        hb = blur(self.H, 3)
+        gy, gx = np.gradient(hb)
+        nx, ny = -gx[sy, sx], gy[sy, sx]                 # outward, +y north
+        nl = np.sqrt(nx * nx + ny * ny) + 1e-6
+        nx, ny = nx / nl, ny / nl
+        sun = np.clip(nx * LIGHT[0] + ny * LIGHT[1], 0, 1)
+        fill = np.clip(-ny, 0, 1) * 0.25                 # light from the camera side
+        foot = (sy1 + 3) - rows - rel[np.minimum(sy + 4, h - 1), sx]   # px above the foot
+        ao = 1 - 0.4 * np.exp(-np.clip(foot, 0, None) / 14)
+        grain = 0.88 + 0.24 * fbm(w, h, 5, 97, 3)
+        alb = blur(self.A, 3)[np.maximum(sy - 5, 0), sx]
+        lum = (0.36 + 0.55 * sun + fill) * ao * grain
+        side = np.clip(alb * lum[..., None], 0, 1) ** (1 / 1.1) * 255
+        out = top * (1 - face) + side * face
         return out.round().clip(0, 255).astype(np.uint8)
 
     def remap(self, a):
@@ -340,15 +358,18 @@ def basic_level():
     c.block((wall_m * ~gap, wall_in), 64, 10, (0.36, 0.38, 0.43), 0.6)
     for k in range(12):
         y0 = k * T + 14
-        seg_m, seg_in = c.rrect(wx + 10, y0, c.w - 8, y0 + T - 28, 8)
+        seg_m, seg_in = c.rrect(wx + 26, y0, c.w - 8, y0 + T - 28, 8)
         c.block((seg_m * ~gap, seg_in), 72, 6, (0.5, 0.53, 0.58), 0.7)
         if not (5 * T < y0 < 8 * T):
-            lamp = c.rect(wx + 4, y0 + 24, wx + 14, y0 + 60, 1.5)[0]
-            c.paint(lamp, albedo=(0, 0, 0), emit=(0.2, 0.45, 1.0))
+            # Light bar on the flat ledge in front of each panel, in a dark housing.
+            housing = c.rrect(wx + 11, y0 + 18, wx + 23, y0 + T - 46, 4)
+            c.block(housing, 67, 2, (0.12, 0.13, 0.16), 0.5)
+            lamp = c.rrect(wx + 14, y0 + 22, wx + 20, y0 + T - 50, 3)[0]
+            c.paint(lamp, albedo=(0, 0, 0), emit=(0.25, 0.55, 1.0))
     # Base entrance: a large concrete pad in front of a dark, lit tunnel flanked by two gate towers.
     gy0, gy1 = 6 * T, 7 * T
     px0, cw = wx - 2.6 * T, 1.3 * T
-    pad = c.rrect(px0, 2.5 * T, wx + 20, 10.5 * T, 8, 2)
+    pad = c.rrect(px0, 2.5 * T, wx - 2, 10.5 * T, 8, 2)
     # Slabs laid in a running bond, each with its own tone, plus weathering stains.
     col = np.floor((c.x - px0) / cw)
     row = np.floor((c.y + np.mod(col, 2) * T / 2) / T)
