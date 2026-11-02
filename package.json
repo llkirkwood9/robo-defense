@@ -56,7 +56,8 @@
     "lint": "expo lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "balance": "tsc -p tools/balance/tsconfig.json && node node_modules/.cache/robo-balance/tools/balance/simulate.js"
   },
   "private": true
 }

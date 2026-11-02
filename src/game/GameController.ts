@@ -11,13 +11,20 @@ import { createPicture, Skia } from '@shopify/react-native-skia';
 import type { SharedValue } from 'react-native-reanimated';
 
 import type { Achievement } from '@/engine/achievements';
-import { FAST_FORWARD_EXTRA_TICKS, GRID, RunState, TICKS_PER_SECOND } from '@/engine/constants';
+import {
+  ELITE_WAVE_INTERVAL,
+  FAST_FORWARD_EXTRA_TICKS,
+  GRID,
+  RunState,
+  TICKS_PER_SECOND,
+} from '@/engine/constants';
 import { ENEMIES } from '@/engine/enemies';
 import type { EnemyType } from '@/engine/enemies';
 import type { Tower } from '@/engine/entities';
 import type {
   GameEvent,
   GameOutcome,
+  GameStats,
   SavedGame,
   ScoreSummary,
   SessionConfig,
@@ -64,6 +71,8 @@ export interface HudState {
   score: number;
   bonus: number;
   runState: RunState;
+  /** Extra cash for sending the next wave early, or null when no wave can be sent. */
+  callWaveBonus: number | null;
   /** Tower whose upgrade panel is open. */
   selected: Tower | null;
   /** Bumped whenever towers change, so the upgrade panel refreshes its options. */
@@ -83,7 +92,7 @@ export interface FeedState {
   /** Pending score popups ("+N"), consumed by the HUD. */
   scoreAdds: { id: number; amount: number }[];
   /** `preview` lists the wave's enemies, e.g. "12 × Soldier · 3 × Jet". */
-  levelBanner: { id: number; level: number; preview: string } | null;
+  levelBanner: { id: number; level: number; preview: string; elite: boolean } | null;
   gameOver: {
     summary: ScoreSummary | null;
     outcome: GameOutcome;
@@ -91,6 +100,7 @@ export interface FeedState {
     level: number;
     /** The game earned more upgrade points than any before. */
     newBest: boolean;
+    stats: GameStats;
   } | null;
 }
 
@@ -109,6 +119,7 @@ export class GameController {
     score: 0,
     bonus: 0,
     runState: RunState.NotStarted,
+    callWaveBonus: null,
     selected: null,
     towerVersion: 0,
   });
@@ -285,6 +296,7 @@ export class GameController {
       score: s.score,
       bonus: s.enemyKillBonus,
       runState: s.runState,
+      callWaveBonus: s.callWaveBonus,
     };
   }
 
@@ -337,7 +349,12 @@ export class GameController {
         break;
       case 'levelStarted':
         this.feed.set({
-          levelBanner: { id: nextId++, level: event.level, preview: this.wavePreview() },
+          levelBanner: {
+            id: nextId++,
+            level: event.level,
+            preview: this.wavePreview(),
+            elite: event.level % ELITE_WAVE_INTERVAL === 0,
+          },
         });
         break;
       case 'message':
@@ -361,6 +378,7 @@ export class GameController {
             outcome: event.outcome,
             level: event.level,
             newBest,
+            stats: event.stats,
           },
         });
         break;
@@ -426,6 +444,13 @@ export class GameController {
   toggleFastForward(): void {
     this.state.toggleFastForward();
     haptics.selection();
+    this.syncHud();
+  }
+
+  /** Sends the next wave while robots are still on the map, for extra cash. */
+  callNextWave(): void {
+    this.state.callNextWave();
+    haptics.impact();
     this.syncHud();
   }
 
@@ -509,6 +534,19 @@ export class GameController {
     } else {
       haptics.impact();
     }
+    this.closeUpgradePanel();
+    this.syncHud();
+  }
+
+  /** Buys `type` for the selected tower and every other tower like it, as far as money allows. */
+  upgradeAllLikeSelected(type: TowerType): void {
+    const tower = this.hud.get().selected;
+    if (!tower) {
+      return;
+    }
+    const count = this.state.upgradeAll(tower.type, type);
+    haptics.impact();
+    this.toast(`Upgraded ${count} ${count === 1 ? 'tower' : 'towers'}`);
     this.closeUpgradePanel();
     this.syncHud();
   }

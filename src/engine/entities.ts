@@ -6,7 +6,15 @@
  */
 import { Achievement } from './achievements';
 import type { AchievementSink } from './achievements';
-import { Dir, GRID, GRID_HALF, GRID_SUB, GRID_SUB_HALF, SUB_SHIFT } from './constants';
+import {
+  Dir,
+  ELITE_VALUE_MULTIPLIER,
+  GRID,
+  GRID_HALF,
+  GRID_SUB,
+  GRID_SUB_HALF,
+  SUB_SHIFT,
+} from './constants';
 import {
   isMissile,
   isShell,
@@ -107,6 +115,8 @@ export interface EnemyState {
   orientation: Dir;
   atExit: boolean;
   exitingGrid: boolean;
+  /** Absent in older saves. */
+  elite?: boolean;
 }
 
 export class Enemy implements EnemyState {
@@ -129,6 +139,8 @@ export class Enemy implements EnemyState {
   exitingGrid = true;
   /** Tick the enemy died on, or -1 while alive. */
   deathTick = -1;
+  /** A wave leader with more hit points and a bigger bounty. */
+  elite = false;
   private dropCounter = 0;
   readonly flames: Flame[] = Array.from({ length: FLAME_COUNT }, () => new Flame());
 
@@ -140,9 +152,11 @@ export class Enemy implements EnemyState {
     tick: number,
     health: number,
     path: number,
+    elite = false,
   ): Enemy {
     const e = new Enemy();
     e.type = type;
+    e.elite = elite;
     e.firstState = tick;
     e.health = health;
     e.maxHealth = health;
@@ -160,6 +174,11 @@ export class Enemy implements EnemyState {
 
   get props() {
     return ENEMIES[this.type];
+  }
+
+  /** Cash awarded for destroying this robot. */
+  get bounty(): number {
+    return this.props.value * (this.elite ? ELITE_VALUE_MULTIPLIER : 1);
   }
 
   /** Top-left of the enemy's grid-sized footprint, in world pixels. */
@@ -289,7 +308,8 @@ export class Enemy implements EnemyState {
       return;
     }
     if (shot === ShotType.Fire || shot === ShotType.SlowFire) {
-      this.fireCounter = Math.min(this.fireCounter + 4, amount);
+      // Burn added per shot grows with the tower, so upgrading a flame tower adds real damage.
+      this.fireCounter = Math.min(this.fireCounter + Math.trunc(amount / 10), amount);
       if (shot === ShotType.SlowFire && this.slowCounter < amount) {
         this.slowCounter = amount;
       }

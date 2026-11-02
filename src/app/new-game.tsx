@@ -40,7 +40,7 @@ const selectMaxLevelWon = (s: ReturnType<typeof profileStore.get>) => s.maxLevel
 
 export default function NewGameScreen() {
   const settings = useStore(profileStore, selectNewGame);
-  useStore(profileStore, selectMaxLevelWon);
+  const maxLevelWon = useStore(profileStore, selectMaxLevelWon);
   const max = maxDifficulty();
   const difficulty = Math.min(settings.difficulty, max);
   const mixUnlocked = towerMixUnlocked();
@@ -177,6 +177,11 @@ export default function NewGameScreen() {
             <Text variant="caption">
               Win at difficulty {max} to raise the limit to {max + 10}.
             </Text>
+            {difficulty > maxLevelWon + 3 && (
+              <Text variant="caption" color={colors.gold}>
+                A big step up from your best win. Robots get tough fast without upgrades.
+              </Text>
+            )}
           </View>
         )}
 

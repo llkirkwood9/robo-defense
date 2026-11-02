@@ -5,7 +5,7 @@
  * `(innerDelay << 24) | (initialDelay << 15) | (type << 10) | (count << 3) | path`, followed by a
  * 0 terminator. The whole schedule is generated from a seed so saved games can regenerate it.
  */
-import { ENEMIES, ENEMY_TYPE_COUNT, enemyBaseHealth, EnemyType } from './enemies';
+import { ENEMIES, ENEMY_TYPE_COUNT, enemyBaseHealth, EnemyType, firstWaveHealth } from './enemies';
 import { JavaRandom } from './random';
 
 export const NUM_LEVELS = 100;
@@ -117,7 +117,7 @@ export function generateWaves(
     if (survival) {
       diff = survivalDifficulty(level);
     }
-    startingHealth = Math.trunc((enemyBaseHealth(EnemyType.Soldier, 1, diff) * 5) / 4);
+    startingHealth = firstWaveHealth(diff);
     const accel = diff * 20 + HEALTH_ACCEL;
     const l = level - 1;
     let health = adjustHealth(
@@ -211,6 +211,18 @@ export class WaveRunner {
     }
     c.subIndex = 0;
     c.frameIndex = 0;
+  }
+
+  /** Moves to the start of a wave (for quick saves made with a different schedule). */
+  seekLevel(level: number): void {
+    let index = 0;
+    for (let l = 1; l < level && index < this.data.length; l++) {
+      while ((this.data[index] ?? 0) !== 0) {
+        index++;
+      }
+      index++;
+    }
+    this.cursor = { index, subIndex: 0, frameIndex: 0, levelNum: level };
   }
 
   /** Moves to the next wave. Returns false when the last wave has been completed. */

@@ -235,7 +235,8 @@ export function EnemyGuide() {
           </Text>
           <Text variant="caption">
             Hit points grow with each wave and difficulty level. Armor is subtracted from every hit,
-            so weak shots may do little damage.
+            so weak shots may do little damage. Every 10th wave is led by a golden Elite with 5× hit
+            points that pays 5× cash.
           </Text>
         </View>
         <ScaleControl label="Wave" value={wave} min={1} max={NUM_LEVELS} onChange={setWave} />

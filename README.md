@@ -53,9 +53,9 @@ index.web.ts      Web entry point (loads Skia's CanvasKit before the app)
 
 ## How it works
 
-**Simulation.** The engine is a faithful port of the original Java: integer maths, the same
-30 ticks per second, the same wave generator, path finding, targeting and damage rules. It has no
-React Native dependencies and reports side effects (sounds, haptics, UI messages, saves) through
+**Simulation.** The engine started as a port of the original Java: integer maths, 30 ticks per
+second, and the same structure for waves, path finding, targeting and damage (see "Balance" below
+for what has since changed). It has no React Native dependencies and reports side effects (sounds, haptics, UI messages, saves) through
 an `emit` callback, so it can be run headlessly.
 
 **Deterministic randomness.** `JavaRandom` reproduces `java.util.Random` exactly. Waves, VR
@@ -68,6 +68,42 @@ records the world into a Skia picture (`WorldRenderer`, a port of the original `
 picture is handed to the canvas through a Reanimated shared value, so React never re-renders for
 world updates. HUD and menus are regular React Native views that subscribe to small stores
 (`src/lib/store.ts`) and only re-render when the value they read changes.
+
+## Balance
+
+`npm run balance` plays full games with scripted bots against the real engine and prints a tower
+value table, the wave economy, and how far each strategy gets on each map and difficulty, including
+which robot leaks most. For example, three games per setup at difficulties 0 and 5 on the first two
+maps, with every levelled upgrade at level 3:
+
+```bash
+npm run balance -- 3 0,5 0,1 3
+```
+
+These numbers were tuned against it. They intentionally differ from the original:
+
+- **Economy.** Clearing a wave pays `2 + wave / 5` cash, and each path after the first adds $10 of
+  starting cash. Kill money alone caused a death spiral, especially on multi-lane maps.
+- **Difficulty ramp.** A difficulty's extra hit points phase in by wave 40. Early waves have the
+  same total hit points but more, weaker robots, so they pay more.
+- **Truck.** Slower (28, was 35) and worth $4 (was $3). It was the top cause of mid-game losses.
+- **Guns.** Medium and Heavy Guns fire faster (5 and 4 ticks per shot, was 6), so upgrading beats
+  spamming Basic Guns and still helps against armor.
+- **Rockets and shells.** Rocket reloads are 55 / 50 / 45 ticks (was 70 / 55 / 50), and Mortar and
+  Artillery reload in 75 ticks (was 90).
+- **Inferno.** Burn added per shot scales with the tower, so the upgrade adds damage rather than
+  only a longer burn.
+- **Upgrade points.** Completing wave N is worth `5 * N * N` points, win or lose.
+
+## Added features
+
+- **Elite robots.** The first robot of every 10th wave has 5× hit points and pays 5× cash.
+- **Send the next wave early.** Once a wave has finished spawning, a HUD button (or `N` on the web)
+  starts the next one for extra cash.
+- **Upgrade all.** The upgrade panel can upgrade every tower of the same type as far as money
+  allows, which also re-arms all mines and teleporters at once.
+- **Game stats.** The end-of-game card shows robots destroyed, towers built and lives lost.
+- **Difficulty warning.** The new-game screen warns when a difficulty is well above your best win.
 
 ## Differences from the original
 

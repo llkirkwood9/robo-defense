@@ -121,8 +121,8 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     health: 30,
     armor: 2,
     isFlyer: false,
-    speed: 35,
-    value: 3,
+    speed: 28,
+    value: 4,
     firstLevel: 25,
     energyBarOffset: 3,
   },
@@ -258,9 +258,24 @@ export const ENEMIES: readonly EnemyProps[] = Array.from({ length: ENEMY_TYPE_CO
   build(DEFS[i as EnemyType]),
 );
 
-/** Hit points for an enemy at a given wave and difficulty. */
+/** Waves over which a difficulty's extra hit points phase in. */
+const DIFFICULTY_RAMP_WAVES = 40;
+
+/**
+ * Hit points for an enemy at a given wave and difficulty. Difficulty phases in over the first waves
+ * (the wave budget stays the same, so early waves are more, weaker robots) because kill money can't
+ * pay for towers fast enough against full-strength robots from wave 1.
+ */
 export function enemyBaseHealth(type: EnemyType, level: number, difficulty: number): number {
-  return Math.trunc((ENEMIES[type].health * (difficulty * 8 + 9 + level)) / 10);
+  const ramp = Math.min(1, (level + DIFFICULTY_RAMP_WAVES / 2) / (DIFFICULTY_RAMP_WAVES * 1.5));
+  return Math.trunc((ENEMIES[type].health * (Math.trunc(difficulty * 8 * ramp) + 9 + level)) / 10);
+}
+
+/** Total hit points of the first wave, which scales every later wave's budget. */
+export function firstWaveHealth(difficulty: number): number {
+  return Math.trunc(
+    (Math.trunc((ENEMIES[EnemyType.Soldier].health * (difficulty * 8 + 10)) / 10) * 5) / 4,
+  );
 }
 
 /** Ticks a dying enemy keeps fading out. */

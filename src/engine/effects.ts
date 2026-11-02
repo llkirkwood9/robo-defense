@@ -4,7 +4,6 @@
  * The original stored these as pooled `GameEvent`s with integer var slots; here they are plain
  * typed records that the renderer draws and the simulation prunes when they expire.
  */
-import type { EnemyType } from './enemies';
 import type { SpriteId } from './data/sprites';
 import { SPRITES } from './data/sprites';
 import { fastRandomInt } from './random';
@@ -49,7 +48,8 @@ export interface Explosion {
 /** "$N" text that floats up from a destroyed enemy. */
 export interface KillPopup {
   tick: number;
-  enemyType: EnemyType;
+  /** Cash the kill paid. */
+  value: number;
   x: number;
   y: number;
 }

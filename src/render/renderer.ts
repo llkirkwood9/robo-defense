@@ -51,6 +51,7 @@ const RANGE_FILL = rgba(80, 220, 255, 0.12);
 const RANGE_STROKE = rgba(120, 230, 255, 0.55);
 const HEALTH_BACK = rgba(0, 0, 0, 0.55);
 const HEALTH_FILL = rgba(255, 48, 48);
+const ELITE_GLOW = rgba(255, 200, 60);
 const MONEY_COLOR = rgba(255, 230, 0);
 const SHADOW = rgba(0, 0, 0);
 
@@ -262,6 +263,21 @@ export class WorldRenderer {
       return;
     }
 
+    if (e.elite) {
+      // A pulsing golden ring around the robot.
+      const pulse = Math.sin(tick * 0.2);
+      const cx = left + p.centerX;
+      const cy = top + p.centerY;
+      const r = Math.max(p.visibleWidth, p.visibleHeight) * (0.55 + 0.03 * pulse);
+      this.paint.setColor(ELITE_GLOW);
+      this.paint.setAlphaf(0.12);
+      canvas.drawCircle(cx, cy, r, this.paint);
+      this.paint.setAlphaf(1);
+      this.strokePaint.setColor(ELITE_GLOW);
+      this.strokePaint.setAlphaf(0.7 + 0.25 * pulse);
+      canvas.drawCircle(cx, cy, r, this.strokePaint);
+    }
+
     let animFrame = e.firstState + tick;
     const burning = e.burning;
     let paint = burning ? this.firePaint : this.spritePaint;
@@ -289,7 +305,7 @@ export class WorldRenderer {
     const barY = top + 1;
     this.paint.setColor(HEALTH_BACK);
     canvas.drawRect(Skia.XYWHRect(barX - 1, barY - 1, barWidth + 2, 4), this.paint);
-    this.paint.setColor(HEALTH_FILL);
+    this.paint.setColor(e.elite ? ELITE_GLOW : HEALTH_FILL);
     canvas.drawRect(Skia.XYWHRect(barX, barY, (barWidth * e.health) / e.maxHealth, 2), this.paint);
   }
 
@@ -377,8 +393,7 @@ export class WorldRenderer {
     const font = this.font;
     for (const k of state.killPopups) {
       const age = state.tick - k.tick;
-      const value = ENEMIES[k.enemyType].value;
-      const text = value > 100 ? '>$100' : `$${value}`;
+      const text = k.value > 100 ? '>$100' : `$${k.value}`;
       const x = k.x + 5;
       const y = k.y + GRID_HALF - age;
       this.paint.setColor(SHADOW);
