@@ -294,8 +294,11 @@ def bomber(phase):
 
 
 def mothership(phase):
-    """Armoured saucer carrier: the hull turns slowly, rim lights chase and the core pulses."""
-    spin = phase * TAU / 12          # 12-fold symmetric hull: a twelfth of a turn loops
+    """
+    Armoured saucer carrier: the hull turns steadily, its rim lights swell in turn and the core
+    breathes. One loop is a quarter turn, which the hull's four-fold symmetry joins up seamlessly.
+    """
+    spin = phase * TAU / 4
     pulse = 0.5 + 0.5 * math.cos(phase * TAU)
 
     def scene(p):
@@ -308,13 +311,13 @@ def mothership(phase):
         parts.append((hull, M['gunmetal']))
         parts.append((np.maximum(hull - 0.25, -grooves), M['steel']))
         parts.append((ellipsoid(p, (0, 0, 4), (20, 20, 9)), M['steel']))
-        parts.append((torus_z(p, 0, 0, 5, 19.5, 1.4), M['l_blue'] if pulse > 0.35 else M['blue']))
+        parts.append((torus_z(p, 0, 0, 5, 19.5, 1.1 + 0.5 * pulse), M['l_blue']))
         parts.append((ellipsoid(p, (0, 0, 10), (9, 9, 5.5)), M['glass']))
         parts.append((torus_z(p, 0, 0, 0, 34, 2.6), M['black']))
-        lit = int(phase * 12) % 3
         for a in range(12):
             q = rot_z(p, a * TAU / 12)
-            parts.append((sphere(q, (0, -34.5, 1.8), 1.7), M['l_cyan'] if a % 3 == lit else M['steel']))
+            swell = 0.5 + 0.5 * math.cos(TAU * (phase - (a % 3) / 3))
+            parts.append((sphere(q, (0, -34.5, 1.8), 1.1 + 0.8 * swell), M['l_cyan']))
         for a in range(4):
             q = rot_z(p, a * TAU / 4 + TAU / 8)
             parts.append((box(q, (0, -27, 4), (5, 4, 3), 1.5), M['gunmetal']))
@@ -434,10 +437,10 @@ def unit_sheet(size, model, frames_per_dir, cam, shadow=0.35, radius=24, post=No
     return dict(size=size, frames=frames)
 
 
-def flyer_sheet(size, model, frames_per_dir, cam, shadow_dy, scale=1.0):
+def flyer_sheet(size, model, frames_per_dir, cam, shadow_dy, scale=1.0, headings=HEADINGS):
     from r3d import scaled
     frames = []
-    for h in HEADINGS:
+    for h in headings:
         for f in range(frames_per_dir):
             m = model(f / frames_per_dir)
             if scale != 1:
@@ -473,6 +476,7 @@ def sheets():
         'jet': flyer_sheet((105, 175), jet, 6, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.35),
         'bomber': flyer_sheet((105, 175), bomber, 8, dict(fw=105, fh=175, ox=52.5, oy=52, elev=UNIT_ELEV), 88, 1.32),
         'arc_crawler': unit_sheet((70, 70), arc_crawler, 16, ground, radius=30, scale=1.25),
-        'mothership': flyer_sheet((105, 151), mothership, 8, dict(fw=105, fh=151, ox=52.5, oy=40, elev=UNIT_ELEV), 70, 1.15),
+        # The saucer looks the same from every side, so one facing holds a longer, smoother loop.
+        'mothership': flyer_sheet((105, 151), mothership, 48, dict(fw=105, fh=151, ox=52.5, oy=40, elev=UNIT_ELEV), 70, 1.15, headings=[0.0]),
     }
     return s

@@ -38,9 +38,12 @@ export enum TowerType {
   Flare = 22,
   /** Not in the original: sets targeting for every tower and boosts nearby towers' range. */
   Command = 23,
+  /** Not in the original: fires a slug through every robot in a straight line. */
+  Rail1 = 24,
+  Rail2 = 25,
 }
 
-export const TOWER_TYPE_COUNT = 24;
+export const TOWER_TYPE_COUNT = 26;
 
 /** How a tower picks its target. Without a Command Tower every tower uses `First`. */
 export enum TargetMode {
@@ -84,7 +87,12 @@ export const COMMAND_AURA_TILES = 2.5;
 /** Range multiplier for towers inside the Command Tower's aura. */
 export const COMMAND_RANGE_BONUS = 1.15;
 /** Towers that can be dragged out of the build dock, in dock order. */
-export const BUILDABLE_TOWERS = [TowerType.Gun1, TowerType.Rocket1, TowerType.Slow1] as const;
+export const BUILDABLE_TOWERS = [
+  TowerType.Gun1,
+  TowerType.Rocket1,
+  TowerType.Slow1,
+  TowerType.Rail1,
+] as const;
 
 export interface TowerProps {
   label: string;
@@ -357,6 +365,28 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
     radius: 55,
     power: r.apply(70, Reward.ExplosivesUpgrade),
+    notes: artilleryNotes,
+  });
+
+  // Rail guns: slow, armor-piercing shots that reward lining robots up.
+  define(TowerType.Rail1, 'Rail Cannon', 'rail_tower', {
+    shotType: ShotType.Rail,
+    upgrades: [TowerType.Rail2, -1, -1],
+    cost: 60,
+    shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
+    radius: 45,
+    power: r.apply(40, Reward.ExplosivesUpgrade),
+    gunRadius: 30,
+    notes: artilleryNotes,
+  });
+  define(TowerType.Rail2, 'Mass Driver', 'rail_tower2', {
+    shotType: ShotType.Rail,
+    downgrade: TowerType.Rail1,
+    cost: 100,
+    shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
+    radius: 45,
+    power: r.apply(85, Reward.ExplosivesUpgrade),
+    gunRadius: 30,
     notes: artilleryNotes,
   });
 

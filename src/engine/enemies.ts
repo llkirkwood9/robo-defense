@@ -47,6 +47,8 @@ export interface EnemyProps {
   minDifficulty: number;
   /** Animation advances every `frameSkip + 1` ticks. */
   frameSkip: number;
+  /** The sheet is one animation shared by every direction, for robots that look the same all round. */
+  singleFacing: boolean;
   /** Offset of the health bar from the sprite's left edge. */
   energyBarOffset: number;
   // Derived sprite geometry, in world pixels.
@@ -77,6 +79,7 @@ interface EnemyDef {
   dropDelay?: number;
   jamDelay?: number;
   frameSkip?: number;
+  singleFacing?: boolean;
   energyBarOffset: number;
   /** [centreX, centreY, visibleWidth, visibleHeight] as ratios of the frame size. */
   shape?: [number, number, number, number];
@@ -222,6 +225,7 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     minDifficulty: 10,
     dropType: EnemyType.Soldier,
     dropDelay: 100,
+    singleFacing: true,
     energyBarOffset: 19,
     shape: [0.5, 0.26, 1.0, 0.5],
   },
@@ -260,10 +264,11 @@ function build(def: EnemyDef): EnemyProps {
     firstLevel: def.firstLevel,
     minDifficulty: def.minDifficulty ?? 0,
     frameSkip: def.frameSkip ?? 0,
+    singleFacing: def.singleFacing ?? false,
     energyBarOffset: def.energyBarOffset,
     frameWidth: w,
     frameHeight: h,
-    framesPerDirection: Math.trunc(sheet.frames / 4),
+    framesPerDirection: def.singleFacing ? sheet.frames : Math.trunc(sheet.frames / 4),
     drawShiftX: Math.trunc((GRID - w) / 2),
     drawShiftY: GRID - h,
     centerX: Math.trunc(cx * w),
@@ -314,8 +319,8 @@ export function enemyFrame(type: EnemyType, orientation: number, frame: number):
   if (p.framesPerDirection === 0) {
     return 0;
   }
+  const facing = p.singleFacing ? 0 : orientation - 1;
   return (
-    (orientation - 1) * p.framesPerDirection +
-    (Math.trunc(frame / (p.frameSkip + 1)) % p.framesPerDirection)
+    facing * p.framesPerDirection + (Math.trunc(frame / (p.frameSkip + 1)) % p.framesPerDirection)
   );
 }

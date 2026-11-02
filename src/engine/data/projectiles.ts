@@ -21,6 +21,8 @@ export enum ShotType {
   UraniumBullet = 12,
   NapalmShell = 13,
   SlowFire = 14,
+  /** Not in the original: a slug that pierces armor and every robot in a line. */
+  Rail = 15,
 }
 
 export interface ProjectileProps {
@@ -68,12 +70,16 @@ export const PROJECTILES: Readonly<Record<ShotType, ProjectileProps>> = {
   [ShotType.UraniumBullet]: sprite(50, 'uranium_bullet'),
   [ShotType.NapalmShell]: sprite(45, 'shell_large'),
   [ShotType.SlowFire]: square(40, 15, -2130706688),
+  [ShotType.Rail]: NONE,
 };
 
 /** Squared radius of mortar/artillery splash damage. */
 export const SPLASH_RADIUS_SQ = (GRID * GRID) / 4;
 /** Squared radius of a mine blast. */
 export const MINE_RADIUS_SQ = GRID * 2 * GRID;
+
+/** A rail slug hits robots whose centre is within this many world pixels of its line. */
+export const RAIL_HALF_WIDTH = (GRID * 2) / 5;
 
 /** Shots that arc through the air and splash on impact. */
 export const isShell = (t: ShotType) =>
@@ -104,6 +110,7 @@ export function soundForShot(t: ShotType): SoundEffect {
     case ShotType.Mortar:
     case ShotType.Artillery:
     case ShotType.NapalmShell:
+    case ShotType.Rail:
       return SoundEffect.Mortar;
     default:
       return SoundEffect.Gun;

@@ -2,8 +2,8 @@
  * Headless balance harness: plays full games with scripted bots against the real engine and prints
  * how far each strategy gets.
  *
- *     npm run balance -- [games per cell] [difficulties] [maps] [reward level]
- *     npm run balance -- 3 0,5,10 0,1,2 0
+ *     npm run balance -- [games per cell] [difficulties] [maps] [reward level] [strategies]
+ *     npm run balance -- 3 0,5,10 0,1,2 0 rail,mixed
  */
 import { Dir, GRID, RunState } from '../../src/engine/constants';
 import { ShotType } from '../../src/engine/data/projectiles';
@@ -48,6 +48,7 @@ const GUN = [TowerType.Gun1, TowerType.Gun2, TowerType.Gun3];
 const FLAME = [TowerType.Gun1, TowerType.Flame1, TowerType.Flame2];
 const ROCKET = [TowerType.Rocket1, TowerType.Rocket2, TowerType.Rocket3];
 const MORTAR = [TowerType.Rocket1, TowerType.Mortar, TowerType.Artillery];
+const RAIL = [TowerType.Rail1, TowerType.Rail2];
 const AA = [TowerType.Gun1, TowerType.Antiair1, TowerType.Antiair2];
 const SAM = [TowerType.Rocket1, TowerType.SurfaceAir1, TowerType.SurfaceAir2];
 
@@ -57,6 +58,7 @@ const STRATEGIES: Strategy[] = [
   { name: 'flame', ground: [FLAME, GUN], air: AA },
   { name: 'rocket', ground: [ROCKET], air: [] },
   { name: 'arty', ground: [MORTAR, GUN], air: SAM },
+  { name: 'rail', ground: [GUN, RAIL], air: [] },
   { name: 'mixed', ground: [GUN, ROCKET, FLAME, MORTAR], air: AA, slowEvery: 5 },
   { name: 'rush', ground: [GUN, ROCKET, FLAME, MORTAR], air: AA, slowEvery: 5, rush: true },
 ];
@@ -403,6 +405,8 @@ function main() {
   const difficulties = (process.argv[3] ?? '0,3,6,10').split(',').map(Number);
   const maps = (process.argv[4] ?? '0,1,2,3,5,6').split(',').map(Number) as MapType[];
   const rewardLevel = Number(process.argv[5] ?? 0);
+  const names = process.argv[6]?.split(',');
+  const strategies = STRATEGIES.filter((s) => !names || names.includes(s.name));
   towerTable(rewardLevel);
   waveProfile(difficulties);
   console.log(
@@ -411,7 +415,7 @@ function main() {
   for (const d of difficulties) {
     for (const map of maps) {
       for (const maze of [false, true]) {
-        const cells = STRATEGIES.map((strategy) => {
+        const cells = strategies.map((strategy) => {
           const results = Array.from({ length: games }, () =>
             play(strategy, map, d, maze, rewardLevel),
           );

@@ -8,10 +8,10 @@ import type { SkCanvas, SkFont, SkImage, SkPaint } from '@shopify/react-native-s
 import { BlendMode, PaintStyle, Skia } from '@shopify/react-native-skia';
 
 import { GRID, GRID_HALF, JAM_RADIUS, SUB_SHIFT } from '@/engine/constants';
-import { PROJECTILES } from '@/engine/data/projectiles';
+import { PROJECTILES, ShotType } from '@/engine/data/projectiles';
 import type { SpriteId } from '@/engine/data/sprites';
 import { frameRect, SPRITES } from '@/engine/data/sprites';
-import { EXPLOSION_SPRITES, JAM_PULSE_TICKS } from '@/engine/effects';
+import { EXPLOSION_SPRITES, JAM_PULSE_TICKS, RAIL_BEAM_TICKS } from '@/engine/effects';
 import { ENEMIES, enemyDeathFrames, enemyFrame } from '@/engine/enemies';
 import type { Enemy, Tower } from '@/engine/entities';
 import type { GameState } from '@/engine/gameState';
@@ -59,6 +59,8 @@ const JAM_COLOR = rgba(120, 230, 255);
 const JAM_ARCS = 3;
 const JAM_ARC_SEGMENTS = 3;
 const JAM_ARC_STEP = 9;
+const RAIL_COLOR = rgba(205, 120, 255);
+const RAIL_CORE = rgba(255, 240, 255);
 
 /** Turret direction shown on placement previews (pointing down-screen). */
 const PREVIEW_ANGLE = 270;
@@ -82,6 +84,7 @@ export class WorldRenderer {
   private readonly strokePaint: SkPaint = Skia.Paint();
   private readonly jamPaint: SkPaint;
   private readonly arcPaint: SkPaint = Skia.Paint();
+  private readonly beamPaint: SkPaint = Skia.Paint();
   private font: SkFont | null = null;
   private readonly starfield = new Starfield();
   /** World-space bounds of the screen for the frame being drawn; sprites outside are skipped. */
@@ -100,6 +103,8 @@ export class WorldRenderer {
     this.arcPaint.setStrokeWidth(1.6);
     this.arcPaint.setAntiAlias(true);
     this.arcPaint.setColor(JAM_COLOR);
+    this.beamPaint.setStyle(PaintStyle.Stroke);
+    this.beamPaint.setAntiAlias(true);
     this.strokePaint.setStyle(PaintStyle.Stroke);
     this.strokePaint.setStrokeWidth(3);
     this.strokePaint.setAntiAlias(true);
@@ -200,6 +205,7 @@ export class WorldRenderer {
     this.drawJamEffects(canvas, state);
     this.drawExplosions(canvas, state, images);
     this.drawBullets(canvas, state, images);
+    this.drawRailBeams(canvas, state);
     this.drawKillPopups(canvas, state, images);
     this.drawSelection(canvas, input);
 
@@ -284,8 +290,24 @@ export class WorldRenderer {
     if (frame >= 0) {
       const x = t.gridX * GRID;
       const y = t.gridY * GRID - p.towerHeight;
-      const paint = input.state.tick < t.jammedUntil ? this.jamPaint : this.spritePaint;
-      this.drawSprite(canvas, input.images.sprites, p.sprite, frame, x, y, paint);
+      const jammed = input.state.tick < t.jammedUntil;
+      this.drawSprite(
+        canvas,
+        input.images.sprites,
+        p.sprite,
+        frame,
+        x,
+        y,
+        jammed ? this.jamPaint : this.spritePaint,
+      );
+      if (p.shotType === ShotType.Rail && !jammed) {
+        // A glow that builds as the slug charges, and stays lit while it waits for a target.
+        const charge = 1 - Math.min(1, Math.max(0, t.shotDelay / p.shotDelay));
+        this.paint.setColor(RAIL_COLOR);
+        this.paint.setAlphaf(0.15 + 0.6 * charge);
+        canvas.drawCircle(x + GRID_HALF, y + GRID_HALF - 7, 2 + 6 * charge, this.paint);
+        this.paint.setAlphaf(1);
+      }
     }
   }
 
@@ -391,6 +413,21 @@ export class WorldRenderer {
         ),
         this.paint,
       );
+    }
+  }
+
+  /** Rail slug streaks: a wide glow around a bright core, both thinning as they fade. */
+  private drawRailBeams(canvas: SkCanvas, state: GameState): void {
+    for (const b of state.railBeams) {
+      const fade = 1 - (state.tick - b.tick) / RAIL_BEAM_TICKS;
+      this.beamPaint.setColor(RAIL_COLOR);
+      this.beamPaint.setAlphaf(0.45 * fade);
+      this.beamPaint.setStrokeWidth(12 * fade);
+      canvas.drawLine(b.x, b.y, b.endX, b.endY, this.beamPaint);
+      this.beamPaint.setColor(RAIL_CORE);
+      this.beamPaint.setAlphaf(fade);
+      this.beamPaint.setStrokeWidth(4 * fade);
+      canvas.drawLine(b.x, b.y, b.endX, b.endY, this.beamPaint);
     }
   }
 

@@ -23,10 +23,11 @@ import {
   isShell,
   MINE_RADIUS_SQ,
   PROJECTILES,
+  RAIL_HALF_WIDTH,
   ShotType,
   SPLASH_RADIUS_SQ,
 } from './data/projectiles';
-import type { Explosion, JamPulse, Particle } from './effects';
+import type { Explosion, JamPulse, Particle, RailBeam } from './effects';
 import { ExplosionType, explosionSize, makeExplosion } from './effects';
 import { ENEMIES, enemyDropDelay, EnemyType } from './enemies';
 import type { MapLayout } from './maps';
@@ -58,6 +59,7 @@ export interface World {
   addParticle(p: Particle): void;
   addExplosion(e: Explosion): void;
   addJamPulse(p: JamPulse): void;
+  addRailBeam(b: RailBeam): void;
   dropUnit(type: EnemyType, x: number, y: number, dir: Dir, path: number): void;
   /** Tower state changed without affecting paths (refreshes upgrade UI). */
   towerChanged(): void;
@@ -195,6 +197,15 @@ export class Enemy implements EnemyState {
 
   get pixelY(): number {
     return this.gridY * GRID + (this.yOffset >> SUB_SHIFT);
+  }
+
+  /** Middle of the robot as drawn: flyers appear well above their footprint. */
+  get drawnCenterX(): number {
+    return this.pixelX + this.props.drawShiftX + this.props.centerX;
+  }
+
+  get drawnCenterY(): number {
+    return this.pixelY + this.props.drawShiftY + this.props.centerY;
   }
 
   get finished(): boolean {
@@ -353,7 +364,7 @@ export class Enemy implements EnemyState {
       this.fireCounter += Math.trunc(amount / 4);
     }
     let damage = amount;
-    if (shot !== ShotType.UraniumBullet) {
+    if (shot !== ShotType.UraniumBullet && shot !== ShotType.Rail) {
       damage -= this.props.armor;
     }
     this.health = Math.max(0, this.health - Math.max(1, damage));
@@ -480,6 +491,11 @@ export class Tower {
       }
       return null;
     }
+    if (p.shotType === ShotType.Rail) {
+      this.shotDelay = p.shotDelay;
+      this.fireRail(world, target);
+      return null;
+    }
 
     this.shotDelay = p.shotDelay;
     const x = this.gridX * GRID + GRID_HALF;
@@ -489,6 +505,41 @@ export class Tower {
     v.y = Math.trunc((v.y * 3) / 4);
     world.shotFired(p.shotType);
     return new Bullet(x + v.x, y + v.y, target, p.shotType, p.power);
+  }
+
+  /**
+   * Fires a slug at `target` that carries on to the end of the tower's range, hitting every robot
+   * along the way. It works on drawn positions, so what the streak crosses is what it hits.
+   */
+  private fireRail(world: World, target: Enemy): void {
+    const p = this.props;
+    const x = this.gridX * GRID + GRID_HALF;
+    const y = this.gridY * GRID + GRID_HALF - (p.towerHeight + 7);
+    const dx = target.drawnCenterX - x;
+    const dy = target.drawnCenterY - y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const ux = dx / distance;
+    const uy = dy / distance;
+    const reach = Math.max(this.attackRadius, distance);
+    for (const e of world.enemies) {
+      if (e.finished) {
+        continue;
+      }
+      const ex = e.drawnCenterX - x;
+      const ey = e.drawnCenterY - y;
+      const along = ex * ux + ey * uy;
+      if (along >= 0 && along <= reach && Math.abs(ex * uy - ey * ux) <= RAIL_HALF_WIDTH) {
+        e.applyDamage(p.power, ShotType.Rail);
+      }
+    }
+    world.addRailBeam({
+      tick: world.tick,
+      x: x + ux * p.gunRadius,
+      y: y + (uy * p.gunRadius * 3) / 4,
+      endX: x + ux * reach,
+      endY: y + uy * reach,
+    });
+    world.shotFired(ShotType.Rail);
   }
 
   /** Turret angle (degrees), tracking the current target. */

@@ -23,7 +23,7 @@ export default function CreditsScreen() {
   return (
     <Screen backdrop="cross_level" contentStyle={styles.content}>
       <GlassSurface radius={radii.lg} style={styles.card}>
-        <Text variant="title">Robo Defense - {APP_VERSION}</Text>
+        <Text variant="title">Robo Defense Reloaded - {APP_VERSION}</Text>
         <Text variant="body" color={colors.textDim}>
           Original game - Lupis Labs Software
         </Text>
@@ -34,7 +34,7 @@ export default function CreditsScreen() {
       <GlassSurface radius={radii.lg} style={styles.card}>
         <Text variant="heading">Sound effects</Text>
         <Text variant="body" color={colors.textDim}>
-          Robo Defense uses the following sound files from Freesound:
+          Robo Defense Reloaded uses the following sound files from Freesound:
         </Text>
         <View style={styles.list}>
           {SOUND_CREDITS.map((c) => (

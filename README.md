@@ -1,4 +1,4 @@
-# Robo Defense (Expo)
+# Robo Defense Reloaded (Expo)
 
 A React Native port of the Android tower defense game **Robo Defense**, built with Expo SDK 58.
 
@@ -97,6 +97,8 @@ These numbers were tuned against it. They intentionally differ from the original
 
 ## Added features
 
+- **Rail Cannon.** A new tower in the build dock, upgrading to the Mass Driver. Every 2.5 seconds it
+  fires a slug that ignores armor and hits every robot along a straight line, ground or air.
 - **Arc Crawler.** A new robot from wave 12: a crab whose coil jams towers within 2.5 tiles for 2
   seconds. Jammed towers stay immune for 2 seconds afterwards, so crawlers can't lock them down.
 - **Elite robots.** The first robot of every 10th wave has 5× hit points and pays 5× cash.

@@ -387,6 +387,59 @@ def artillery_turret():
     return scene
 
 
+# ---- Rail guns (white / violet) ---------------------------------------------------------------
+
+def rail_base(level):
+    def scene(p):
+        x, y, z = P(p)
+        parts = [
+            (extrude(box2d(x, y, 27, 27), z, 0, 7, 2.5), M['black']),
+            (extrude(ngon2d(x, y, 21 - np.clip(z - 7, 0, 33) * 0.1, 6), z, 6, 40, 2), M['white']),
+            (extrude(ngon2d(x, y, 21.6, 6), z, 26, 28.5, 0.4), M['black']),
+            (cyl(p, 0, 0, 17.5, 39, DECK, 0.8), M['gunmetal']),
+            (torus_z(p, 0, 0, DECK - 0.6, 17, 0.9), M['l_purple']),
+        ]
+        # Capacitor banks on the corners, taller on the upgrade.
+        top = 20 + level * 5
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                parts.append((cyl(p, sx * 21, sy * 21, 4.4, 5, top, 1), M['steel']))
+                parts.append((torus_z(p, sx * 21, sy * 21, top - 6, 4.4, 0.8), M['gold'] if level == 2 else M['purple']))
+                parts.append((sphere(p, (sx * 21, sy * 21, top + 0.6), 2.4), M['l_purple']))
+        return parts
+    return scene
+
+
+def rail_turret(level):
+    gap = 3.4 if level == 1 else 4.2
+    rail = 1.3 if level == 1 else 1.7
+    trim = M['purple'] if level == 1 else M['gold']
+
+    def scene(p):
+        parts = [
+            (cyl(p, 0, 0, 12.5, 0, 4, 0.8), M['black']),
+            (box(p, (0, -6, 9), (8.5 + level, 9, 5), 2.5), M['white']),
+            (box(p, (0, -8, 14), (5.5, 4.5, 1), 0.8), trim),
+            (box(p, (0, -15.4, 9), (6, 1.4, 3.6), 0.8), M['gunmetal']),
+            (sphere(p, (0, -8, 15.4), 1.2), M['l_purple']),
+        ]
+        # Two parallel rails with the charge running down the open gap between them.
+        for sx in (-1, 1):
+            parts.append((box(p, (sx * gap, 12, 9), (rail, 15, 3.2), 0.5), M['silver']))
+            parts.append((box(p, (sx * (gap - rail - 0.1), 13, 9), (0.3, 13, 1.6), 0.15), M['l_purple']))
+        parts.append((box(p, (0, 13, 9), (0.5, 13, 0.5), 0.25), M['l_purple']))
+        # Clamps hold the rails apart without closing the top of the gap.
+        for cy in (3.5, 11.5, 19.5):
+            clamp = box(p, (0, cy, 8), (gap + rail + 1, 1.1, 5), 0.5)
+            parts.append((cut(clamp, box(p, (0, cy, 9), (gap - rail, 2, 3.4), 0.1)), trim))
+        if level == 2:
+            for sx in (-1, 1):
+                for fy in (-9, -5, -1):
+                    parts.append((box(p, (sx * 11.2, fy, 9), (1.4, 0.8, 3.6), 0.3), M['gunmetal']))
+        return parts
+    return scene
+
+
 # ---- Slow (ice) towers ------------------------------------------------------------------------
 
 def ice_base(level):
@@ -597,6 +650,8 @@ def sheets():
                    dict(scene=scaled(mortar_turret(), 1.4), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=24)]
     s['artillery'] = [base_frame(heavy_base('artillery')),
                       dict(scene=scaled(artillery_turret(), 1.25), cam=dict(BASE_CAM), ground_shadow=0.25, shadow_radius=26)]
+    for lvl, sid in ((1, 'rail_tower'), (2, 'rail_tower2')):
+        s[sid] = [base_frame(rail_base(lvl))] + turret_frames(rail_turret(lvl))
     for lvl, sid in ((1, 'ice_tower'), (2, 'ice_tower2'), (3, 'ice_tower3')):
         s[sid] = [base_frame(ice_base(lvl))] + [
             dict(scene=translate(scaled(ice_crystal(lvl, f / 8), 1.25), 0, 0, -15), cam=dict(BASE_CAM), ground_shadow=0.0, glow=('cyan', 0.35 + 0.15 * math.sin(f / 8 * TAU)))

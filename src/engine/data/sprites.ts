@@ -61,6 +61,8 @@ export const SPRITES = {
   mine_armed: squares(70, 7),
   mine_unarmed: squares(70, 1),
   mortar: squares(70, 2),
+  rail_tower: squares(70, 33),
+  rail_tower2: squares(70, 33),
   rocket_tower: squares(70, 33),
   rocket_tower2: squares(70, 33),
   rocket_tower3: squares(70, 33),
@@ -69,7 +71,7 @@ export const SPRITES = {
   teleport_tower_armed: squares(70, 17),
   teleport_tower_unarmed: squares(70, 1),
 
-  // Enemies: four equal groups of frames, ordered right, up, left, down.
+  // Enemies: four equal groups of frames, ordered right, up, left, down (see `singleFacing`).
   soldier: squares(70, 48),
   heavy_soldier: squares(70, 64),
   runner: squares(70, 48),
@@ -80,7 +82,7 @@ export const SPRITES = {
   jet: strip(105, 175, 24),
   bomber: strip(105, 175, 32),
   titan: strip(70, 140, 40),
-  mothership: strip(105, 151, 32),
+  mothership: strip(105, 151, 48),
   arc_crawler: squares(70, 64),
 
   // Projectiles: one frame, or 32 directional frames.

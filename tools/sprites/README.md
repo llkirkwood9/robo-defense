@@ -26,4 +26,5 @@ Sheets are rendered at `PPU` (2) image pixels per world pixel and packed into gr
 than 2048 px. `SPRITE_RES` and `MAX_SHEET_PX` in `src/engine/data/sprites.ts` must match.
 Frame counts, sizes and orders follow `SPRITES` in that file: tower sheets are base + 32
 turret headings clockwise from north (or animation frames), enemy sheets are four equal
-groups facing right, up, left and down.
+groups facing right, up, left and down (the mothership, which looks the same all round, has one
+group).

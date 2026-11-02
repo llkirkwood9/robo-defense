@@ -53,6 +53,8 @@ export const SPRITE_SOURCES: Record<SpriteId, number> = {
   mixer_path: require('@/assets/sprites/mixer_path.png'),
   mortar: require('@/assets/sprites/mortar.png'),
   mothership: require('@/assets/sprites/mothership.png'),
+  rail_tower: require('@/assets/sprites/rail_tower.png'),
+  rail_tower2: require('@/assets/sprites/rail_tower2.png'),
   rocket: require('@/assets/sprites/rocket.png'),
   rocket_tower: require('@/assets/sprites/rocket_tower.png'),
   rocket_tower2: require('@/assets/sprites/rocket_tower2.png'),

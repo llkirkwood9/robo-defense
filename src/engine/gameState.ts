@@ -23,8 +23,8 @@ import {
   waveClearBonus,
 } from './constants';
 import type { ShotType } from './data/projectiles';
-import type { Explosion, JamPulse, KillPopup, Particle } from './effects';
-import { JAM_PULSE_TICKS, KILL_POPUP_TICKS } from './effects';
+import type { Explosion, JamPulse, KillPopup, Particle, RailBeam } from './effects';
+import { JAM_PULSE_TICKS, KILL_POPUP_TICKS, RAIL_BEAM_TICKS } from './effects';
 import type { EnemyState, World } from './entities';
 import { Bullet, Enemy, Tower } from './entities';
 import { ENEMIES, enemyBaseHealth, enemyDeathFrames, EnemyType } from './enemies';
@@ -195,6 +195,7 @@ export class GameState implements World {
   explosions: Explosion[] = [];
   killPopups: KillPopup[] = [];
   jamPulses: JamPulse[] = [];
+  railBeams: RailBeam[] = [];
 
   private readonly waves = new WaveRunner();
   private waveSeed = 0;
@@ -245,6 +246,10 @@ export class GameState implements World {
 
   addJamPulse(p: JamPulse): void {
     this.jamPulses.push(p);
+  }
+
+  addRailBeam(b: RailBeam): void {
+    this.railBeams.push(b);
   }
 
   dropUnit(type: EnemyType, x: number, y: number, dir: Dir, path: number): void {
@@ -332,6 +337,7 @@ export class GameState implements World {
     this.explosions = [];
     this.killPopups = [];
     this.jamPulses = [];
+    this.railBeams = [];
     this.targetable = [];
     this.unitCreatedThisLevel = false;
     this.flags = freshFlags();
@@ -673,6 +679,7 @@ export class GameState implements World {
     this.explosions = this.explosions.filter((e) => t < e.firstTick + e.frames);
     this.killPopups = this.killPopups.filter((k) => t - k.tick < KILL_POPUP_TICKS);
     this.jamPulses = this.jamPulses.filter((p) => t - p.tick < JAM_PULSE_TICKS);
+    this.railBeams = this.railBeams.filter((b) => t - b.tick < RAIL_BEAM_TICKS);
   }
 
   private deployUnit(type: EnemyType, path: number): void {

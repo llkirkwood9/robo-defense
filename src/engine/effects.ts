@@ -46,6 +46,17 @@ export interface Explosion {
 }
 
 /** "$N" text that floats up from a destroyed enemy. */
+/** The streak left by a rail slug, in world pixels. */
+export interface RailBeam {
+  tick: number;
+  x: number;
+  y: number;
+  endX: number;
+  endY: number;
+}
+
+export const RAIL_BEAM_TICKS = 10;
+
 /** An expanding ring showing an Arc Crawler's pulse. */
 export interface JamPulse {
   tick: number;
