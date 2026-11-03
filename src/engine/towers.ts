@@ -87,12 +87,7 @@ export const COMMAND_AURA_TILES = 2.5;
 /** Range multiplier for towers inside the Command Tower's aura. */
 export const COMMAND_RANGE_BONUS = 1.15;
 /** Towers that can be dragged out of the build dock, in dock order. */
-export const BUILDABLE_TOWERS = [
-  TowerType.Gun1,
-  TowerType.Rocket1,
-  TowerType.Slow1,
-  TowerType.Rail1,
-] as const;
+export const BUILDABLE_TOWERS = [TowerType.Gun1, TowerType.Rocket1, TowerType.Slow1] as const;
 
 export interface TowerProps {
   label: string;
@@ -194,7 +189,11 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
   define(TowerType.Gun2, 'Medium Gun', 'gun_tower2', {
     shotType: ShotType.Bullet,
     downgrade: TowerType.Gun1,
-    upgrades: [TowerType.Gun3, has(Reward.CommandTowerUnlocked) ? TowerType.Command : -1, -1],
+    upgrades: [
+      TowerType.Gun3,
+      TowerType.Rail1,
+      has(Reward.CommandTowerUnlocked) ? TowerType.Command : -1,
+    ],
     cost: 4,
     shotDelay: 5,
     radius: 18,
@@ -371,6 +370,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
   // Rail guns: slow, armor-piercing shots that reward lining robots up.
   define(TowerType.Rail1, 'Rail Cannon', 'rail_tower', {
     shotType: ShotType.Rail,
+    downgrade: TowerType.Gun2,
     upgrades: [TowerType.Rail2, -1, -1],
     cost: 60,
     shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),

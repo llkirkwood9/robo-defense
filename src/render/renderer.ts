@@ -15,7 +15,7 @@ import { EXPLOSION_SPRITES, JAM_PULSE_TICKS, RAIL_BEAM_TICKS } from '@/engine/ef
 import { ENEMIES, enemyDeathFrames, enemyFrame } from '@/engine/enemies';
 import type { Enemy, Tower } from '@/engine/entities';
 import type { GameState } from '@/engine/gameState';
-import type { TowerType } from '@/engine/towers';
+import { TowerType } from '@/engine/towers';
 
 import type { Camera } from './camera';
 import { argb, rgba } from './colors';
@@ -61,6 +61,22 @@ const JAM_ARC_SEGMENTS = 3;
 const JAM_ARC_STEP = 9;
 const RAIL_COLOR = rgba(205, 120, 255);
 const RAIL_CORE = rgba(255, 240, 255);
+const RAIL_FILL = rgba(225, 95, 255);
+const RAIL_DARK = rgba(28, 12, 48);
+/**
+ * Where the channel between a rail turret's rails sits in its sprite frame (see `rail_turret` and
+ * `turret_frames` in tools/sprites/towers.py, drawn by a 55 degree camera): the turret's origin
+ * row, and how far along the barrel the open stretches between its clamps run, breech first.
+ */
+const RAIL_ORIGIN_Y = 35.3;
+const RAIL_SECTIONS = [
+  [6, 13.5],
+  [16.5, 24],
+  [27, 33.8],
+] as const;
+const RAIL_CHARGE_LENGTH = RAIL_SECTIONS.reduce((sum, [from, to]) => sum + to - from, 0);
+/** Barrel lengths lying along the map are foreshortened by the camera. */
+const RAIL_Y_SCALE = 0.82;
 
 /** Turret direction shown on placement previews (pointing down-screen). */
 const PREVIEW_ANGLE = 270;
@@ -92,6 +108,8 @@ export class WorldRenderer {
   private viewTop = 0;
   private viewRight = 0;
   private viewBottom = 0;
+  /** Game tick of the frame being drawn. */
+  private renderTick = 0;
 
   constructor() {
     // Status tints use the same multiply colours as the original.
@@ -128,6 +146,7 @@ export class WorldRenderer {
     this.viewTop = camera.toWorldY(0);
     this.viewRight = camera.toWorldX(sw);
     this.viewBottom = camera.toWorldY(sh);
+    this.renderTick = tick;
 
     // Space backdrop with stars around the map edges.
     this.paint.setColor(BACKDROP);
@@ -301,13 +320,70 @@ export class WorldRenderer {
         jammed ? this.jamPaint : this.spritePaint,
       );
       if (p.shotType === ShotType.Rail && !jammed) {
-        // A glow that builds as the slug charges, and stays lit while it waits for a target.
-        const charge = 1 - Math.min(1, Math.max(0, t.shotDelay / p.shotDelay));
-        this.paint.setColor(RAIL_COLOR);
-        this.paint.setAlphaf(0.15 + 0.6 * charge);
-        canvas.drawCircle(x + GRID_HALF, y + GRID_HALF - 7, 2 + 6 * charge, this.paint);
-        this.paint.setAlphaf(1);
+        this.drawRailCharge(canvas, t, frame, x, y);
       }
+    }
+  }
+
+  /**
+   * Lights the channel between a rail turret's rails from breech to muzzle as the slug charges, and
+   * keeps it pulsing while the slug waits for a target. Stops at each clamp, so they stay in front.
+   */
+  private drawRailCharge(canvas: SkCanvas, t: Tower, frame: number, x: number, y: number): void {
+    if (
+      x > this.viewRight ||
+      y > this.viewBottom ||
+      x + GRID < this.viewLeft ||
+      y + GRID < this.viewTop
+    ) {
+      return;
+    }
+    const p = t.props;
+    const charge = 1 - Math.min(1, Math.max(0, t.shotDelay / p.shotDelay));
+    const heading = ((frame - 1) * 2 * Math.PI) / p.directions;
+    const ux = Math.sin(heading);
+    const uy = -Math.cos(heading) * RAIL_Y_SCALE;
+    const originX = x + GRID_HALF;
+    const originY = y + RAIL_ORIGIN_Y;
+    const width = t.type === TowerType.Rail2 ? 4.5 : 3.5;
+    let lit = charge * RAIL_CHARGE_LENGTH;
+    for (const [from, to] of RAIL_SECTIONS) {
+      const x0 = originX + ux * from;
+      const y0 = originY + uy * from;
+      // The empty channel goes dark, or the sprite's own glow would read as already charged.
+      this.beamPaint.setColor(RAIL_DARK);
+      this.beamPaint.setAlphaf(0.9);
+      this.beamPaint.setStrokeWidth(width + 1);
+      canvas.drawLine(x0, y0, originX + ux * to, originY + uy * to, this.beamPaint);
+      if (lit > 0) {
+        const end = Math.min(to, from + lit);
+        const x1 = originX + ux * end;
+        const y1 = originY + uy * end;
+        this.beamPaint.setColor(RAIL_COLOR);
+        this.beamPaint.setAlphaf(0.6);
+        this.beamPaint.setStrokeWidth(width + 5);
+        canvas.drawLine(x0, y0, x1, y1, this.beamPaint);
+        this.beamPaint.setColor(RAIL_FILL);
+        this.beamPaint.setAlphaf(1);
+        this.beamPaint.setStrokeWidth(width);
+        canvas.drawLine(x0, y0, x1, y1, this.beamPaint);
+        this.beamPaint.setColor(RAIL_CORE);
+        this.beamPaint.setStrokeWidth(width * 0.4);
+        canvas.drawLine(x0, y0, x1, y1, this.beamPaint);
+        lit -= to - from;
+      }
+    }
+    if (charge >= 1) {
+      const muzzle = RAIL_SECTIONS[RAIL_SECTIONS.length - 1][1];
+      const mx = originX + ux * muzzle;
+      const my = originY + uy * muzzle;
+      const pulse = Math.sin(t.gridX + t.gridY + this.renderTick * 0.25);
+      this.paint.setColor(RAIL_COLOR);
+      this.paint.setAlphaf(0.4 + 0.15 * pulse);
+      canvas.drawCircle(mx, my, 4 + 0.75 * pulse, this.paint);
+      this.paint.setColor(RAIL_CORE);
+      this.paint.setAlphaf(1);
+      canvas.drawCircle(mx, my, 2, this.paint);
     }
   }
 

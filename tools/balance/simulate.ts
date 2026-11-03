@@ -48,7 +48,7 @@ const GUN = [TowerType.Gun1, TowerType.Gun2, TowerType.Gun3];
 const FLAME = [TowerType.Gun1, TowerType.Flame1, TowerType.Flame2];
 const ROCKET = [TowerType.Rocket1, TowerType.Rocket2, TowerType.Rocket3];
 const MORTAR = [TowerType.Rocket1, TowerType.Mortar, TowerType.Artillery];
-const RAIL = [TowerType.Rail1, TowerType.Rail2];
+const RAIL = [TowerType.Gun1, TowerType.Gun2, TowerType.Rail1, TowerType.Rail2];
 const AA = [TowerType.Gun1, TowerType.Antiair1, TowerType.Antiair2];
 const SAM = [TowerType.Rocket1, TowerType.SurfaceAir1, TowerType.SurfaceAir2];
 
