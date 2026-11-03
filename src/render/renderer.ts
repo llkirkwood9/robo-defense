@@ -18,6 +18,7 @@ import type { GameState } from '@/engine/gameState';
 import { TowerType } from '@/engine/towers';
 
 import type { Camera } from './camera';
+import { Ambience, jitter } from './ambience';
 import { argb, rgba } from './colors';
 import type { GameImages } from './images';
 import type { ScreenRect } from './starfield';
@@ -84,12 +85,6 @@ const PREVIEW_ANGLE = 270;
 /** Flame sprite geometry inside an enemy's footprint (from the original draw maths). */
 const EFFECT_WIDTH = GRID - 2;
 
-/** Repeatable pseudo-random value in [0, 1) for a given integer. */
-const jitter = (n: number) => {
-  const v = Math.sin(n * 12.9898) * 43758.5453;
-  return v - Math.floor(v);
-};
-
 export class WorldRenderer {
   private readonly paint: SkPaint = Skia.Paint();
   private readonly spritePaint: SkPaint = Skia.Paint();
@@ -103,6 +98,7 @@ export class WorldRenderer {
   private readonly beamPaint: SkPaint = Skia.Paint();
   private font: SkFont | null = null;
   private readonly starfield = new Starfield();
+  private readonly ambience = new Ambience();
   /** World-space bounds of the screen for the frame being drawn; sprites outside are skipped. */
   private viewLeft = 0;
   private viewTop = 0;
@@ -148,20 +144,26 @@ export class WorldRenderer {
     this.viewBottom = camera.toWorldY(sh);
     this.renderTick = tick;
 
-    // Space backdrop with stars around the map edges.
-    this.paint.setColor(BACKDROP);
-    canvas.drawRect(Skia.XYWHRect(0, 0, sw, sh), this.paint);
-    const mapLeft = camera.toScreenX(0);
-    const mapTop = camera.toScreenY(0);
-    const mapRight = camera.toScreenX(mapW);
-    const mapBottom = camera.toScreenY(mapH);
-    const margins: ScreenRect[] = [
-      { left: 0, top: 0, right: mapLeft, bottom: sh },
-      { left: mapRight, top: 0, right: sw, bottom: sh },
-      { left: 0, top: 0, right: sw, bottom: mapTop },
-      { left: 0, top: mapBottom, right: sw, bottom: sh },
-    ];
-    this.starfield.draw(canvas, margins, sw, sh, tick);
+    if (layout.backdrop === 'clouds') {
+      this.ambience.drawClouds(canvas, camera, images.sprites, tick);
+    } else {
+      // Space backdrop with stars around the map edges, and under it when it is see-through.
+      this.paint.setColor(BACKDROP);
+      canvas.drawRect(Skia.XYWHRect(0, 0, sw, sh), this.paint);
+      const mapLeft = camera.toScreenX(0);
+      const mapTop = camera.toScreenY(0);
+      const mapRight = camera.toScreenX(mapW);
+      const mapBottom = camera.toScreenY(mapH);
+      const margins: ScreenRect[] = layout.seeThrough
+        ? [{ left: 0, top: 0, right: sw, bottom: sh }]
+        : [
+            { left: 0, top: 0, right: mapLeft, bottom: sh },
+            { left: mapRight, top: 0, right: sw, bottom: sh },
+            { left: 0, top: 0, right: sw, bottom: mapTop },
+            { left: 0, top: mapBottom, right: sw, bottom: sh },
+          ];
+      this.starfield.draw(canvas, margins, sw, sh, tick);
+    }
 
     canvas.save();
     canvas.translate(camera.offsetX, camera.offsetY);
@@ -175,22 +177,6 @@ export class WorldRenderer {
       Skia.XYWHRect(0, 0, mapW, mapH),
       this.spritePaint,
     );
-    canvas.restore();
-
-    // Roadway: stars show through the open sky.
-    if (layout.starfield.length > 0) {
-      const skies = layout.starfield.map((r) => ({
-        left: camera.toScreenX(r.left),
-        top: camera.toScreenY(r.top),
-        right: camera.toScreenX(r.right),
-        bottom: camera.toScreenY(r.bottom),
-      }));
-      this.starfield.draw(canvas, skies, sw, sh, tick);
-    }
-
-    canvas.save();
-    canvas.translate(camera.offsetX, camera.offsetY);
-    canvas.scale(camera.scale, camera.scale);
 
     for (const d of layout.underlays) {
       if (d.frameTicks) {
@@ -199,6 +185,15 @@ export class WorldRenderer {
         this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
       }
     }
+    this.ambience.drawLights(
+      canvas,
+      layout.lights,
+      tick,
+      this.viewLeft,
+      this.viewTop,
+      this.viewRight,
+      this.viewBottom,
+    );
     for (const t of state.towers) {
       const sprite = t.props.sprite;
       if (sprite) {
@@ -220,6 +215,9 @@ export class WorldRenderer {
       this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
     }
 
+    if (layout.dust) {
+      this.ambience.drawDust(canvas, images.sprites, tick, mapW, mapH);
+    }
     this.drawParticles(canvas, state);
     this.drawJamEffects(canvas, state);
     this.drawExplosions(canvas, state, images);

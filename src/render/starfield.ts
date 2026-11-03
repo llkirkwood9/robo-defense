@@ -1,6 +1,6 @@
 /**
- * Twinkling screen-space starfield (port of the original `Starfield`), shown through the open
- * sky areas of The Roadway and around the edges of the map.
+ * Twinkling screen-space starfield (port of the original `Starfield`), shown around the edges of
+ * the map and through the see-through parts of The Roadway's image.
  */
 import type { SkCanvas, SkPaint } from '@shopify/react-native-skia';
 import { Skia } from '@shopify/react-native-skia';

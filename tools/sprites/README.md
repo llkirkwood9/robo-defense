@@ -9,7 +9,7 @@ Requires Python 3 with `numpy` and `Pillow`.
 python build.py            # every sprite sheet -> assets/sprites (parallel; ~30 min)
 python build.py gun_tower  # just one sheet
 python build.py --preview --ss 2 --frames 0,1,9,17 gun_tower jet   # contact sheet only
-python levels.py           # map backgrounds -> assets/levels
+python levels.py           # map backgrounds -> assets/levels (.jpg, or .webp where see-through)
 python titles.py           # title portraits + app icons -> assets/title, assets/ui
 ```
 
@@ -19,7 +19,7 @@ python titles.py           # title portraits + app icons -> assets/title, assets
 | `palette.py` | Shared materials |
 | `towers.py`, `enemies.py`, `effects.py` | Models and frame lists for each sheet |
 | `fx.py` | 2D effects: explosions, fire, glows, sparkles |
-| `levels.py` | Height-field map backgrounds, VR Training tiles, Courtyard archway overlays |
+| `levels.py` | Height-field map backgrounds, VR Training tiles, Courtyard arches, lava, fountain, clouds, dust |
 | `titles.py` | Title-screen portraits and icons |
 
 Sheets are rendered at `PPU` (2) image pixels per world pixel and packed into grids no wider

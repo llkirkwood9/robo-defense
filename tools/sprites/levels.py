@@ -1,6 +1,6 @@
 """
-Map backgrounds (assets/levels/*.jpg) and map decoration sprites (VR Training blocks, Courtyard
-archway overlays), rendered from procedural height fields lit from the upper right.
+Map backgrounds (assets/levels/*.jpg, or *.webp where the sky shows through) and map decoration
+sprites (VR Training blocks, Courtyard arches, lava, the fountain, clouds, dust), rendered from procedural height fields lit from the upper right.
 
     python levels.py              # every map
     python levels.py basic_level  # one map
@@ -14,6 +14,9 @@ import sys
 
 import numpy as np
 from PIL import Image, ImageFilter
+
+from palette import M
+from r3d import cyl, ellipsoid, sphere, torus_z
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -440,60 +443,155 @@ def water_frame(c, water, t):
     return np.dstack([rgb * 255, a * 255]).round().clip(0, 255).astype(np.uint8)
 
 
-# ---- Ruins: sandstone pavers and dry grass, crumbled walls with four gates --------------------------
+# ---- Ruins: sand and old paved roads inside a stone curtain wall with four gate towers ------------
 
-def paver_field(c, seed, cell, base_cols, gap_col, jitter=0.25):
-    """Irregular stone slabs (tiles of `cell` px with random offsets and tilt)."""
-    rng = np.random.default_rng(seed)
-    gx = (c.x // cell).astype(int)
-    gy = (c.y // cell).astype(int)
-    fx = c.x / cell - gx
-    fy = c.y / cell - gy
-    ncell = (gx.max() + 2) * (gy.max() + 2)
-    shade = rng.random(ncell).astype(np.float32)
-    tilt_x = (rng.random(ncell).astype(np.float32) - 0.5) * 6
-    tilt_y = (rng.random(ncell).astype(np.float32) - 0.5) * 6
-    idx = gy * (gx.max() + 2) + gx
-    edge = np.minimum(np.minimum(fx, 1 - fx), np.minimum(fy, 1 - fy)) * cell
-    slab = smoothstep(1, 4, edge)
-    col = mix(base_cols[0], base_cols[1], shade[idx])
-    c.A[:] = mix(gap_col, col, slab)
-    c.H[:] = slab * (5 + tilt_x[idx] * (fx - 0.5) + tilt_y[idx] * (fy - 0.5))
-    c.S[:] = 0.1
-    return slab
+def ashlar(c, w, h, seed):
+    """Running-bond masonry: returns (seam mask 0 at the joints, per-block tone 0..1)."""
+    row = np.floor(c.y / h)
+    xo = c.x + np.mod(row, 2) * w / 2
+    col = np.floor(xo / w)
+    fx, fy = np.mod(xo, w), np.mod(c.y, h)
+    edge = np.minimum(np.minimum(fx, w - fx), np.minimum(fy, h - fy))
+    tone = np.mod(np.sin(col * 12.9898 + row * 78.233 + seed) * 43758.5, 1).astype(np.float32)
+    return smoothstep(0.8, 3.5, edge), tone
+
+
+ENTRANCE_GLOW = (0.3, 1.0, 0.45)
+EXIT_GLOW = (1.0, 0.28, 0.2)
+
+
+def gate_arrows(c, code, entrance, reach=0.9, opacity=0.8):
+    """Chevrons on the floor at a gate (wall-coded like maps.ts): pointing in at an entrance and
+    out at an exit, in the matching colour."""
+    wall, off = code >> 8, code & 255
+    dist = {1: c.w - c.x, 2: c.y, 3: c.x, 4: c.h - c.y}[wall]
+    along = np.abs((c.y if wall in (1, 3) else c.x) - (off + 0.5) * T)
+    color = ENTRANCE_GLOW if entrance else EXIT_GLOW
+    half = T * 0.3
+    for k in range(3):
+        d0 = T * (reach + 0.34 * k)
+        bend = (half - along) * 0.7
+        line = np.abs(dist - d0 - (bend if entrance else -bend))
+        m = smoothstep(9, 6, line) * smoothstep(half + 1, half - 1, along) * opacity * (1 - 0.22 * k)
+        c.paint(m, albedo=np.asarray(color) * 0.8, emit=np.asarray(color) * 0.3)
+
+
+RUINS_ENTRANCES = (774, 522)
+RUINS_EXITS = (262, 1034)
+RUINS_WALL = 48          # height of the curtain wall
+RUINS_PIER = 86          # gate tower footprint, px
+RUINS_PIER_TOP = 78
+RUINS_GROUND = 5
+
+
+def ruins_stone(c, seed, lo=(0.36, 0.3, 0.22), mid=(0.56, 0.48, 0.35), hi=(0.74, 0.65, 0.49)):
+    """Dressed sandstone for the walls and towers."""
+    seam, tone = ashlar(c, 64, 32, seed)
+    rough = fbm(c.w, c.h, 22, seed + 1, 3)
+    return palette_map(np.clip(tone * 0.45 + rough * 0.55, 0, 1), [(0, lo), (0.5, mid), (1, hi)]) * (0.5 + 0.5 * seam)[..., None]
 
 
 def cross_level():
     c = Canvas(20, 12)
-    paver_field(c, 11, T // 2, ((0.48, 0.36, 0.22), (0.66, 0.5, 0.31)), (0.32, 0.24, 0.15))
-    grit = fbm(c.w, c.h, 8, 12, 3)
-    c.A *= (0.85 + grit * 0.3)[..., None]
-    # Cracks.
-    cr = np.abs(fbm(c.w, c.h, 90, 13, 4) - 0.5)
-    crack = 1 - smoothstep(0.004, 0.012, cr)
-    c.paint(crack * 0.8, albedo=(0.15, 0.1, 0.06))
-    c.H -= crack * 3
-    # Dry grass drifts.
-    drift = smoothstep(0.55, 0.68, fbm(c.w, c.h, 220, 14))
-    straw = value_noise(c.w, c.h, 2, 15)
-    tuft = drift * smoothstep(0.35, 0.8, straw + fbm(c.w, c.h, 14, 16, 2) * 0.4)
-    c.paint(tuft, albedo=palette_map(straw, [(0, (0.55, 0.45, 0.12)), (1, (0.92, 0.8, 0.32))]))
-    c.H += tuft * 4
-    # Crumbled walls along the north and south edges, open at the gates.
-    gates = gate_mask(c, [774, 262, 522, 1034], 0.6)
-    for y0, y1 in ((0, T * 0.34 + north_lift(48)), (c.h - T * 0.34, c.h)):
-        wall = c.rect(-10, y0, c.w + 10, y1, 3)
-        rough = fbm(c.w, c.h, 30, 17, 3)
-        m = wall[0] * (1 - gates) * smoothstep(0.2, 0.5, rough + 0.2)
-        c.H = np.maximum(c.H, m * (30 + rough * 18))
-        c.paint(m, albedo=palette_map(rough, [(0, (0.42, 0.33, 0.22)), (1, (0.7, 0.58, 0.4))]), spec=0.1)
-    # Broken columns at the corners and beside the gates.
-    for tx, ty in ((0.5, 0.5), (19.5, 0.5), (0.5, 11.5), (19.5, 11.5), (9.2, 0.3), (10.8, 0.3), (9.2, 11.7), (10.8, 11.7)):
-        col = c.disc(tx * T, ty * T, T * 0.22, 2)
-        c.block(col, 46, 8, (0.62, 0.52, 0.36), 0.15)
-        ring = c.disc(tx * T, ty * T, T * 0.15, 2)
-        c.paint(ring[0], albedo=(0.5, 0.41, 0.28))
-    c.ground = 5  # height of the playing surface
+    # Wind-blown sand, in the same soft macro shapes as the Basic map's meadow.
+    macro = fbm(c.w, c.h, 300, 11, 4)
+    fine = fbm(c.w, c.h, 7, 12, 3)
+    grain = value_noise(c.w, c.h, 2, 13)
+    c.A[:] = palette_map(np.clip(macro * 1.3 - 0.15 + (fine - 0.5) * 0.3 + (grain - 0.5) * 0.08, 0, 1),
+                         [(0, (0.42, 0.31, 0.18)), (0.5, (0.6, 0.46, 0.27)), (1, (0.76, 0.61, 0.38))])
+    c.H[:] = macro * 8 + grain * 1.2
+    c.S[:] = 0.03
+    # The old paved roads between the gates, breaking up into the sand at their edges.
+    wob = (fbm(c.w, c.h, 46, 14, 3) - 0.5) * T * 0.9
+    road = np.maximum(smoothstep(T * 0.95, T * 0.7, np.abs(c.y - 6.5 * T) + wob),
+                      smoothstep(T * 0.95, T * 0.7, np.abs(c.x - 10.5 * T) + wob))
+    plaza = smoothstep(T * 2.5, T * 2.2, np.hypot(c.x - 10.5 * T, c.y - 6.5 * T) + wob)
+    ruin = smoothstep(0.66, 0.7, fbm(c.w, c.h, 170, 15, 4))
+    paved = np.clip(np.maximum(np.maximum(road, plaza), ruin), 0, 1)
+    seam, tone = ashlar(c, T * 0.75, T * 0.5, 16)
+    rough = fbm(c.w, c.h, 16, 17, 3)
+    slab = palette_map(np.clip(tone * 0.4 + rough * 0.45 + 0.1, 0, 1),
+                       [(0, (0.46, 0.38, 0.27)), (1, (0.72, 0.62, 0.45))])
+    c.paint(paved, albedo=slab * (0.62 + 0.38 * seam)[..., None], spec=0.08)
+    c.H += paved * (1 + seam * 1.5)
+    # A few cracks in the paving, and sand silting up its joints.
+    cr = np.abs(fbm(c.w, c.h, 110, 18, 4) - 0.5)
+    crack = (1 - smoothstep(0.003, 0.009, cr)) * paved * smoothstep(0.5, 0.62, fbm(c.w, c.h, 200, 19, 2))
+    c.paint(crack * 0.7, albedo=(0.2, 0.15, 0.1))
+    c.H -= crack * 2
+    silt = smoothstep(0.52, 0.68, fbm(c.w, c.h, 70, 20, 4)) * paved
+    c.paint(silt * 0.75, albedo=mix((0.56, 0.43, 0.25), (0.72, 0.58, 0.36), fine))
+    # Sparse dry grass away from the roads.
+    clump = smoothstep(0.6, 0.72, fbm(c.w, c.h, 90, 21, 4)) * (1 - paved)
+    straw = value_noise(c.w, c.h, 2, 22)
+    tuft = clump * smoothstep(0.45, 0.8, straw)
+    c.paint(tuft * 0.8, albedo=palette_map(fine, [(0, (0.36, 0.33, 0.12)), (1, (0.6, 0.54, 0.22))]))
+    c.H += tuft * 3
+    # Scattered rubble, kept clear of the gates.
+    rng = np.random.default_rng(23)
+    for _ in range(46):
+        tx, ty = rng.uniform(1.2, 18.8), rng.uniform(1.4, 10.8)
+        if abs(ty - 6.5) < 1.2 and (tx < 3 or tx > 17) or abs(tx - 10.5) < 1.2 and (ty < 3 or ty > 9):
+            continue
+        bw, bh = rng.uniform(7, 20), rng.uniform(6, 13)
+        chunk = c.rrect(tx * T - bw, ty * T - bh, tx * T + bw, ty * T + bh, 3, 2)
+        c.block(chunk, rng.uniform(8, 14), 3, np.asarray((0.58, 0.5, 0.37)) * rng.uniform(0.8, 1.1), 0.08)
+
+    # The curtain wall on all four sides, open only at the gates. Pieces just south of an opening
+    # start lower, so that once lifted by the oblique view the opening still lines up with its row.
+    band = round(T * 0.42)
+    lift = round((RUINS_WALL - RUINS_GROUND) * OBLIQUE)
+    north_y = band + lift
+    stone = ruins_stone(c, 24)
+    sides = (
+        (c.rect(-10, -10, c.w + 10, north_y, 2), (c.x > 10 * T + 1) & (c.x < 11 * T - 1)),
+        (c.rect(-10, c.h - band, c.w + 10, c.h + 10, 2), (c.x > 10 * T + 1) & (c.x < 11 * T - 1)),
+        (c.rect(-10, north_y - 4, band, c.h - band + 4, 2), (c.y > 6 * T + 1) & (c.y < 7 * T - 1 + lift)),
+        (c.rect(c.w - band, north_y - 4, c.w + 10, c.h - band + 4, 2), (c.y > 6 * T + 1) & (c.y < 7 * T - 1 + lift)),
+    )
+    for (m, inside), gap in sides:
+        c.block((m * ~gap, inside), RUINS_WALL, 5, stone, 0.08)
+    # Battlements: raised merlons along the outer half of the wall.
+    for (m, inside), gap in sides:
+        horizontal = np.mod(c.x, 70) < 38
+        vertical = np.mod(c.y, 70) < 38
+        is_ns = m[int(north_y / 2), c.w // 2] > 0.5 or m[c.h - 4, c.w // 2] > 0.5
+        crest = (m > 0.5) * (inside > 5) * (inside < 30) * ~gap * (horizontal if is_ns else vertical)
+        c.H = np.where(crest, RUINS_WALL + 10, c.H)
+        c.paint(crest * 0.5, albedo=(0.74, 0.65, 0.5))
+
+    # Gate towers either side of each opening, plus a bastion in each corner.
+    P = RUINS_PIER
+    pier_lift = round((RUINS_PIER_TOP - RUINS_GROUND) * OBLIQUE)
+    towers = [
+        (0, 6 * T - P, P, 6 * T), (0, 7 * T + pier_lift, P, 7 * T + pier_lift + P),
+        (c.w - P, 6 * T - P, c.w, 6 * T), (c.w - P, 7 * T + pier_lift, c.w, 7 * T + pier_lift + P),
+        (10 * T - P, pier_lift, 10 * T, pier_lift + P), (11 * T, pier_lift, 11 * T + P, pier_lift + P),
+        (10 * T - P, c.h - 2 - P, 10 * T, c.h - 2), (11 * T, c.h - 2 - P, 11 * T + P, c.h - 2),
+    ]
+    corners = [(0, pier_lift, P + 8, pier_lift + P + 8), (c.w - P - 8, pier_lift, c.w, pier_lift + P + 8),
+               (0, c.h - 10 - P, P + 8, c.h - 2), (c.w - P - 8, c.h - 10 - P, c.w, c.h - 2)]
+    tower_stone = ruins_stone(c, 26, (0.42, 0.35, 0.25), (0.62, 0.53, 0.38), (0.8, 0.71, 0.54))
+    for x0, y0, x1, y1 in towers + corners:
+        c.block(c.rrect(x0, y0, x1, y1, 5, 2), RUINS_PIER_TOP, 5, tower_stone, 0.1)
+        cap = c.rrect(x0 + 10, y0 + 10, x1 - 10, y1 - 10, 4, 2)
+        c.block(cap, RUINS_PIER_TOP + 5, 3, (0.5, 0.42, 0.3), 0.1)
+    # Brazier bowls on the gate towers; the game lights them green (entrance) or red (exit).
+    for x0, y0, x1, y1 in towers:
+        bowl = c.disc((x0 + x1) / 2, (y0 + y1) / 2, 20, 2)
+        c.block(bowl, RUINS_PIER_TOP + 9, 3, (0.1, 0.09, 0.08), 0.3)
+
+    # Clear each gateway: packed road, a stone sill and shadow falling away at the map edge.
+    for code in RUINS_ENTRANCES + RUINS_EXITS:
+        wall, off = code >> 8, code & 255
+        dist = {1: c.w - c.x, 2: c.y, 3: c.x, 4: c.h - c.y}[wall]
+        along = np.abs((c.y if wall in (1, 3) else c.x) - (off + 0.5) * T)
+        mouth = smoothstep(T * 0.48, T * 0.45, along) * smoothstep(T * 0.72, T * 0.6, dist)
+        c.paint(mouth * smoothstep(T * 0.42, T * 0.02, dist) * 0.92, albedo=(0.04, 0.03, 0.03))
+        sill = smoothstep(T * 0.5, T * 0.47, along) * smoothstep(9, 6, np.abs(dist - T * 0.56))
+        c.paint(sill, albedo=(0.74, 0.66, 0.5), height=9)
+        gate_arrows(c, code, code in RUINS_ENTRANCES)
+    c.ground = RUINS_GROUND
     return c
 
 
@@ -575,79 +673,132 @@ def threeway_level():
     return c
 
 
-# ---- Courtyard: tiled plaza around a lawn, gatehouses with archways -------------------------------
+# ---- Courtyard: tiled plaza around a garden with a fountain, gatehouses with archways -------------
 
-COURTYARD_ARCHES = [  # (sprite id, x, y, w, h) in world px, from maps.ts
-    ('courtyard_ne_overlay', 70 * 15 + 1, 0, 32, 63),
-    ('courtyard_nw_overlay', (70 * 9) // 2 + 1, 0, 32, 63),
-    ('courtyard_sw_overlay', (70 * 17) // 4 + 3, 70 * 11 + 3, 45, 65),
-    ('courtyard_se_overlay', 70 * 15 + 2, 70 * 11 + 3, 45, 65),
-]
 COURT_NORTH = T * 0.36 + round(48 * OBLIQUE)
-ARCH_LIFT = 20   # world px the lintel tops rise in the oblique view (see maps.ts overlays)
+COURT_ENTRANCES = (774, 516, 1034, 527)
+COURT_EXITS = (262, 1028, 522, 1039)
+ARCH_TOP = 72            # height of the lintels (lifts their tops about 19 world px)
+ARCH_LIFT = round((ARCH_TOP - 3) * OBLIQUE / PPU)
+# Lintels over the gates, drawn above units: (sprite id, column, is north, emissive gem). The sprite
+# box is (70 * col - 6, top, 82, ARCH_H) in world px; maps.ts places the overlays at the same spot.
+ARCH_NORTH_Y, ARCH_SOUTH_Y, ARCH_H = 0, 70 * 11 - 20, 66
+COURTYARD_ARCHES = (
+    ('courtyard_nw_overlay', 4, True, ENTRANCE_GLOW),
+    ('courtyard_n_overlay', 10, True, EXIT_GLOW),
+    ('courtyard_ne_overlay', 15, True, ENTRANCE_GLOW),
+    ('courtyard_sw_overlay', 4, False, EXIT_GLOW),
+    ('courtyard_s_overlay', 10, False, ENTRANCE_GLOW),
+    ('courtyard_se_overlay', 15, False, EXIT_GLOW),
+)
 
 
 def courtyard_level():
     c = Canvas(20, 12)
-    # Plaza flagstones (two tiles per map tile), cool grey-blue.
-    rng = np.random.default_rng(31)
-    cell = T // 2
-    gx, gy = (c.x // cell).astype(int), (c.y // cell).astype(int)
-    fx, fy = c.x / cell - gx, c.y / cell - gy
-    shade = rng.random(4096).astype(np.float32)[gy * 64 + gx]
-    edge = np.minimum(np.minimum(fx, 1 - fx), np.minimum(fy, 1 - fy)) * cell
-    seam = smoothstep(1.5, 4.5, edge)
-    marble = fbm(c.w, c.h, 50, 32, 4)
-    c.A[:] = mix((0.42, 0.47, 0.55), (0.62, 0.67, 0.74), shade * 0.5 + marble * 0.5) * (0.4 + 0.6 * seam)[..., None]
-    c.H[:] = seam * 3
-    c.S[:] = 0.35
-    # Central lawn with a stone kerb.
-    kerb = c.rect(6 * T - 10, 4 * T - 10, 14 * T + 10, 8 * T + 10, 2)
-    c.block(kerb, 7, 3, (0.7, 0.72, 0.75), 0.3)
-    lawn = c.rect(6 * T, 4 * T, 14 * T, 8 * T, 2)[0]
+    # Plaza flagstones, cool grey-blue with soft joints.
+    fx, fy = np.mod(c.x, T), np.mod(c.y, T)
+    seam = smoothstep(1, 4, np.minimum(np.minimum(fx, T - fx), np.minimum(fy, T - fy)))
+    tone = np.mod(np.sin(np.floor(c.x / T) * 12.9898 + np.floor(c.y / T) * 78.233) * 43758.5, 1).astype(np.float32)
+    marble = fbm(c.w, c.h, 60, 32, 4)
+    c.A[:] = mix((0.42, 0.46, 0.54), (0.62, 0.66, 0.72), np.clip(tone * 0.25 + marble * 0.75, 0, 1)) * (0.74 + 0.26 * seam)[..., None]
+    c.H[:] = seam * 2.5
+    c.S[:] = 0.3
+    # Pale banding around the garden, leading out to the gates along row 6 and columns 4, 10 and 15.
+    lanes = np.zeros((c.h, c.w), np.float32)
+    lanes = np.maximum(lanes, smoothstep(T * 0.5, T * 0.47, np.abs(c.y - 6.5 * T)))
+    for col in (4, 10, 15):
+        lanes = np.maximum(lanes, smoothstep(T * 0.5, T * 0.47, np.abs(c.x - (col + 0.5) * T)))
+    c.paint(lanes * 0.12, albedo=(0.74, 0.77, 0.82))
+    # The garden: four lawns around a paved circle with the fountain in the middle.
+    gx0, gy0, gx1, gy1 = 6 * T, 4 * T, 14 * T, 8 * T
+    cx, cy = 10 * T, 6 * T
+    c.block(c.rrect(gx0 - 12, gy0 - 12, gx1 + 12, gy1 + 12, 14), 7, 3, (0.72, 0.74, 0.78), 0.3)
+    lawn_m = c.rrect(gx0, gy0, gx1, gy1, 8)[0]
     blades = value_noise(c.w, c.h, 2, 33)
-    c.paint(lawn, albedo=palette_map(np.clip(fbm(c.w, c.h, 60, 34) + (blades - 0.5) * 0.4, 0, 1),
-                                     [(0, (0.08, 0.22, 0.08)), (1, (0.25, 0.5, 0.18))]), spec=0.03)
-    c.H = np.where(lawn > 0.5, 6 + blades * 2, c.H)
-    # Planters (the four obstacles), each 2x1 tiles: hedge boxes.
+    grass = palette_map(np.clip(fbm(c.w, c.h, 90, 34) * 1.2 - 0.1 + (blades - 0.5) * 0.3, 0, 1),
+                        [(0, (0.1, 0.25, 0.07)), (0.5, (0.2, 0.42, 0.12)), (1, (0.36, 0.6, 0.18))])
+    c.paint(lawn_m, albedo=grass, spec=0.03)
+    c.H = np.where(lawn_m > 0.5, 6 + blades * 2, c.H)
+    r = np.hypot(c.x - cx, c.y - cy)
+    paths = np.maximum(smoothstep(T * 0.3, T * 0.27, np.abs(c.y - cy)), smoothstep(T * 0.3, T * 0.27, np.abs(c.x - cx)))
+    gravel = palette_map(fbm(c.w, c.h, 5, 36, 2), [(0, (0.54, 0.5, 0.43)), (1, (0.76, 0.72, 0.63))])
+    c.paint(paths * lawn_m, albedo=gravel, spec=0.05)
+    c.H = np.where(paths * lawn_m > 0.5, 6.5, c.H)
+    pad = smoothstep(T * 1.5, T * 1.47, r)
+    rings = 0.84 + 0.16 * smoothstep(2, 5, np.abs(np.mod(r, T * 0.32) - T * 0.16))
+    c.paint(pad, albedo=mix((0.56, 0.58, 0.62), (0.76, 0.78, 0.82), marble) * rings[..., None], spec=0.3)
+    c.H = np.where(pad > 0.5, 7, c.H)
+    c.paint(smoothstep(T * 1.5, T * 1.47, r) * smoothstep(T * 1.4, T * 1.43, r), albedo=(0.82, 0.84, 0.88), height=9)
+    # Flower beds tucked into the lawn corners.
+    rng = np.random.default_rng(37)
+    for bx, by in ((6.55, 4.55), (13.45, 4.55), (6.55, 7.45), (13.45, 7.45)):
+        bed = c.disc(bx * T, by * T, T * 0.36, 3)
+        c.block(bed, 11, 4, (0.13, 0.28, 0.09), 0.02)
+        hue = np.asarray(((0.95, 0.3, 0.42), (0.98, 0.78, 0.25), (0.62, 0.35, 0.95), (0.98, 0.98, 0.95))[rng.integers(0, 4)])
+        for _ in range(26):
+            a, d = rng.uniform(0, math.tau), T * 0.3 * math.sqrt(rng.random())
+            c.paint(c.disc(bx * T + math.cos(a) * d, by * T + math.sin(a) * d, 4.5, 1.5)[0], albedo=hue, height=14)
+    # Planters (the four obstacles), each 2x1 tiles: clipped hedges in stone boxes.
     for ox, oy in ((4, 4), (14, 4), (4, 7), (14, 7)):
-        box_ = c.rrect(ox * T + 6, oy * T + 8, (ox + 2) * T - 6, (oy + 1) * T - 8, 10)
-        c.block(box_, 26, 5, (0.46, 0.48, 0.5), 0.3)
+        c.block(c.rrect(ox * T + 6, oy * T + 8, (ox + 2) * T - 6, (oy + 1) * T - 8, 10), 26, 5, (0.58, 0.6, 0.64), 0.3)
         hedge = c.rrect(ox * T + 16, oy * T + 18, (ox + 2) * T - 16, (oy + 1) * T - 18, 14)
         leaf = fbm(c.w, c.h, 6, 35 + ox + oy, 3)
-        c.block(hedge, 40, 14, palette_map(leaf, [(0, (0.06, 0.2, 0.06)), (1, (0.2, 0.45, 0.14))]), 0.05)
+        c.block(hedge, 40, 14, palette_map(leaf, [(0, (0.06, 0.2, 0.06)), (1, (0.22, 0.48, 0.14))]), 0.05)
         c.H += hedge[0] * leaf * 5
-    # Perimeter colonnade wall (north & south), gatehouses at the four gate columns.
-    for y0, y1 in ((0, COURT_NORTH), (c.h - T * 0.36, c.h)):
-        wall = c.rect(-10, y0, c.w + 10, y1, 2)
-        c.block(wall, 38, 5, (0.5, 0.54, 0.6), 0.3)
-        for tx in range(20):
-            pil = c.disc(tx * T + T / 2, (y0 + y1) / 2, 15)
-            c.block(pil, 48, 4, (0.66, 0.7, 0.76), 0.5)
-            lamp = c.disc(tx * T + T / 2, (y0 + y1) / 2, 5)[0]
-            c.paint(lamp, albedo=(0, 0, 0), emit=(1.0, 0.85, 0.5))
-    # Open the gates (N4, N10, N15; S4, S10, S15) and the side gates (W6, E6).
-    for col in (4, 10, 15):
-        for y0, y1 in ((0, COURT_NORTH), (c.h - T * 0.36, c.h)):
-            g = c.rect(col * T + 8, y0 - 2, (col + 1) * T - 8, y1 + 2, 2)[0]
+    # Perimeter wall with evenly spaced lit pillars, open at every gate.
+    wall_stone = ruins_stone(c, 38, (0.36, 0.39, 0.46), (0.52, 0.56, 0.63), (0.66, 0.7, 0.76))
+    side_lift = round(27 * OBLIQUE)
+    gate_cols = (4, 10, 15)
+    open_ns = np.zeros((c.h, c.w), bool)
+    for col in gate_cols:
+        open_ns |= (c.x > col * T + 2) & (c.x < (col + 1) * T - 2)
+    south_y = c.h - T * 0.36
+    for y0, y1 in ((-10, COURT_NORTH), (south_y, c.h + 10)):
+        m, inside = c.rect(-10, y0, c.w + 10, y1, 2)
+        c.block((m * ~open_ns, inside), 38, 5, wall_stone, 0.25)
+    open_side = (c.y > 6 * T + 2) & (c.y < 7 * T - 2 + side_lift)
+    for x0, x1 in ((-10, T * 0.36), (c.w - T * 0.36, c.w + 10)):
+        m, inside = c.rect(x0, COURT_NORTH - 4, x1, south_y + 4, 2)
+        c.block((m * ~open_side, inside), 30, 5, wall_stone, 0.25)
+    for tx in range(20):
+        if tx in gate_cols or tx in (3, 5, 9, 11, 14, 16):
+            continue
+        for yy in (COURT_NORTH * 0.56, c.h - T * 0.18):
+            c.block(c.disc(tx * T + T / 2, yy, 15), 48, 4, (0.7, 0.73, 0.78), 0.5)
+            c.paint(c.disc(tx * T + T / 2, yy, 5)[0], albedo=(0, 0, 0), emit=(1.0, 0.85, 0.5))
+    # Gatehouse piers beside the gates.
+    pier_lift = round((54 - 3) * OBLIQUE)
+    for col in gate_cols:
+        for x0, x1 in ((col * T - 24, col * T + 4), ((col + 1) * T - 4, (col + 1) * T + 24)):
+            c.block(c.rrect(x0, pier_lift, x1, COURT_NORTH + 8, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
+            c.block(c.rrect(x0, south_y - 8, x1, c.h - 2, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
+    for x0, x1 in ((0, T * 0.42), (c.w - T * 0.42, c.w)):
+        c.block(c.rrect(x0, 6 * T - 30, x1, 6 * T, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
+        c.block(c.rrect(x0, 7 * T + pier_lift, x1, 7 * T + pier_lift + 30, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
+    # Gate floors with arrows showing which way robots come and go.
+    for col in gate_cols:
+        for y0, y1 in ((-2, COURT_NORTH + 2), (south_y - 2, c.h + 2)):
+            g = c.rect(col * T + 3, y0, (col + 1) * T - 3, y1, 2)[0]
             c.H = c.H * (1 - g) + 3 * g
-            c.paint(g, albedo=(0.36, 0.4, 0.46))
-    for x0, x1 in ((0, T * 0.36), (c.w - T * 0.36, c.w)):
-        wall = c.rect(x0, COURT_NORTH, x1, c.h - T * 0.36, 2)
-        c.block(wall, 30, 5, (0.5, 0.54, 0.6), 0.3)
-        g = c.rect(x0 - 2, 6 * T + 8, x1 + 2, 7 * T - 8, 2)[0]
+            c.paint(g, albedo=(0.3, 0.33, 0.39))
+    for x0, x1 in ((-2, T * 0.42), (c.w - T * 0.42, c.w + 2)):
+        g = c.rect(x0, 6 * T + 3, x1, 7 * T - 3, 2)[0]
         c.H = c.H * (1 - g) + 3 * g
-        c.paint(g, albedo=(0.36, 0.4, 0.46))
-    # Archway lintels over the four corner-side gates (also exported as overlay sprites).
+        c.paint(g, albedo=(0.3, 0.33, 0.39))
+    for code in COURT_ENTRANCES + COURT_EXITS:
+        gate_arrows(c, code, code in COURT_ENTRANCES, reach=1.42 if code >> 8 == 4 else 0.72, opacity=0.65)
+    # Lintels across the column gates (also exported as overlay sprites, so robots pass beneath).
     arch = np.zeros((c.h, c.w), np.float32)
-    for sid, x, y, w, h in COURTYARD_ARCHES:
-        x0, y0, x1, y1 = x * PPU, y * PPU, (x + w) * PPU, (y + h) * PPU
-        span = c.rrect(x0 + 2, y0 + 2, x1 - 2, y1 - 2, 8)
-        c.block(span, 70, 6, (0.72, 0.75, 0.8), 0.5)
-        stripe = c.rect(x0 + 8, y0 + 8, x1 - 8, y1 - 8, 1.5)[0] * ((np.mod(c.y, 24) < 4).astype(np.float32))
-        c.paint(stripe * 0.7, albedo=(0.45, 0.48, 0.55))
-        gem = c.disc((x0 + x1) / 2, (y0 + y1) / 2, 6)[0]
-        c.paint(gem, albedo=(0, 0, 0), emit=(0.3, 0.7, 1.0))
+    lift_px = ARCH_LIFT * PPU
+    for _, col, north, gem in COURTYARD_ARCHES:
+        x0, x1 = col * T - 10, (col + 1) * T + 10
+        y0 = lift_px if north else 70 * PPU * 11 + 8
+        y1 = y0 + 46
+        span = c.rrect(x0, y0, x1, y1, 6)
+        c.block(span, ARCH_TOP, 5, (0.72, 0.75, 0.8), 0.5)
+        band = c.rect(x0 + 10, y0 + 12, x1 - 10, y1 - 12, 1.5)[0]
+        c.paint(band, albedo=(0.5, 0.53, 0.6))
+        c.paint(c.disc((x0 + x1) / 2, (y0 + y1) / 2, 8)[0], albedo=(0, 0, 0), emit=gem)
         arch = np.maximum(arch, span[0])
     c.overlay_mask = arch
     c.ground = 3  # height of the playing surface
@@ -752,106 +903,314 @@ ROAD_OBSTACLES = [(3, 1, 1, 1), (6, 1, 1, 2), (2, 3, 1, 1), (5, 3, 1, 1), (3, 4,
                   (1, 15, 1, 1), (3, 15, 1, 1), (6, 15, 1, 1), (2, 17, 1, 1), (5, 17, 1, 1), (3, 18, 1, 1),
                   (6, 18, 2, 1), (2, 19, 1, 1), (4, 19, 2, 1), (3, 20, 1, 1), (2, 21, 4, 1), (6, 22, 1, 3),
                   (1, 23, 2, 1), (2, 24, 1, 1)]
-ROAD_STARS = [(0, 0, 2, 1), (6, 0, 3, 1), (0, 1, 1, 2), (6, 1, 1, 2), (8, 1, 1, 1), (8, 5, 1, 8), (0, 8, 1, 9),
-              (2, 11, 1, 1), (5, 11, 1, 1), (2, 14, 1, 1), (5, 14, 1, 1), (8, 20, 1, 6), (3, 21, 1, 1),
-              (0, 22, 1, 4), (6, 23, 1, 3), (2, 24, 1, 2)]
+# Cut-outs where the sky shows through the image; ROAD_SKY in maps.ts lists the same cells.
+ROAD_SKY = [(0, 0, 2, 1), (6, 0, 3, 1), (0, 1, 1, 2), (8, 1, 1, 1), (8, 5, 1, 8), (0, 8, 1, 9), (8, 20, 1, 6),
+            (0, 22, 1, 4), (1, 25, 2, 1), (6, 25, 2, 1)]
+ROAD_GROUND = 23
+ROAD_TOP = 50            # machinery housings; lamp sockets sit on their lids at ROAD_TOP + 10
+
+
+def road_has_lamp(x, y):
+    """Which machinery cells carry a lamp (the rest are vents). maps.ts uses the same rule."""
+    return (x * 5 + y * 3) % 4 != 0
 
 
 def roadway_level():
     c = Canvas(9, 26)
     deck_plates(c, 51, base=(0.34, 0.36, 0.4))
+    # Scuffed tyre lanes and paint wear so the deck is not one flat grey.
+    wear = fbm(c.w, c.h, 90, 55, 4)
+    c.A *= (0.82 + wear * 0.36)[..., None]
+    lane = smoothstep(T * 0.48, T * 0.44, np.abs(c.x - 4.5 * T))
+    stripe = smoothstep(4, 2.5, np.abs(np.abs(c.x - 4.5 * T) - T * 0.46)) * (np.mod(c.y, T * 0.5) < T * 0.28)
+    c.paint(lane * 0.16, albedo=(0.14, 0.15, 0.18))
+    c.paint(stripe * 0.55, albedo=(0.7, 0.72, 0.76), spec=0.2)
     c.H += 20
-    # Holes to open space (the game draws stars there); give them dark recessed rims.
-    void = np.zeros((c.h, c.w), np.float32)
-    for x, y, w, h in ROAD_STARS:
-        void = np.maximum(void, c.rect(x * T, y * T, (x + w) * T, (y + h) * T, 1.5)[0])
-    rim = blur(void, 6)
-    c.paint(np.clip(rim * 1.6, 0, 1), albedo=(0.12, 0.13, 0.15))
-    c.H -= void * 20
-    c.paint(void, albedo=(0.01, 0.01, 0.03))
-    # Obstacles: machinery housings with glowing reactor cores and vents.
-    rng = np.random.default_rng(52)
+    sky = np.zeros((c.h, c.w), np.float32)
+    for x, y, w, h in ROAD_SKY:
+        sky[y * T:(y + h) * T, x * T:(x + w) * T] = 1
+    sky = np.where(sky > 0.5, 1.0, np.minimum(sky, blur(sky, 1))).astype(np.float32)
+    # A raised steel lip wherever the deck meets open sky or the edge of the map.
+    near = np.clip(blur(sky, 7) * 3, 0, 1) * (1 - sky)
+    edge = 1 - smoothstep(0, 13, np.minimum(np.minimum(c.x, c.w - c.x), np.minimum(c.y, c.h - c.y)))
+    lip = np.maximum(smoothstep(0.1, 0.32, near), edge) * (1 - sky)
+    c.paint(lip, albedo=(0.5, 0.52, 0.57), spec=0.6, height=26)
+    # The deck has real thickness: its south faces drop away towards the sky.
+    c.H = c.H * (1 - sky) - 50 * sky
+    c.paint(sky, albedo=(0.03, 0.03, 0.05))
+    c.open_mask = sky
+    # Obstacles: machinery housings with lamp sockets and vents.
     for x, y, w, h in ROAD_OBSTACLES:
-        box_ = c.rrect(x * T + 6, y * T + 6, (x + w) * T - 6, (y + h) * T - 6, 10)
-        top = 20 + 30
-        c.block(box_, top, 8, (0.24, 0.25, 0.29), 0.5)
-        lid = c.rrect(x * T + 22, y * T + 22, (x + w) * T - 22, (y + h) * T - 22, 8)
-        c.block(lid, top + 6, 4, (0.36, 0.38, 0.43), 0.6)
+        c.block(c.rrect(x * T + 6, y * T + 6, (x + w) * T - 6, (y + h) * T - 6, 10), ROAD_TOP, 8, (0.22, 0.23, 0.27), 0.5)
+        c.block(c.rrect(x * T + 20, y * T + 20, (x + w) * T - 20, (y + h) * T - 20, 8), ROAD_TOP + 6, 4, (0.38, 0.4, 0.45), 0.6)
         for i in range(w):
             for j in range(h):
                 cx, cy = (x + i + 0.5) * T, (y + j + 0.5) * T
-                kind = rng.integers(0, 3)
-                if kind == 0:
-                    core = c.disc(cx, cy, 18)
-                    c.block(core, top + 10, 6, (0.1, 0.1, 0.12), 0.8)
-                    c.paint(c.disc(cx, cy, 11)[0], emit=(1.0, 0.6, 0.15))
-                elif kind == 1:
-                    core = c.disc(cx, cy, 20)
-                    c.block(core, top + 14, 10, (0.55, 0.6, 0.7), 0.8)
-                    c.paint(c.disc(cx, cy, 6)[0], emit=(0.35, 0.65, 1.0))
+                if road_has_lamp(x + i, y + j):
+                    # The game draws and blinks the light itself (see roadwayLights in maps.ts).
+                    c.block(c.disc(cx, cy, 19), ROAD_TOP + 10, 5, (0.08, 0.08, 0.1), 0.8)
+                    c.paint(c.disc(cx, cy, 11)[0], albedo=(0.02, 0.02, 0.03))
                 else:
                     vent = c.rect(cx - 28, cy - 18, cx + 28, cy + 18, 1)[0]
                     slats = (np.mod(c.y, 9) < 4).astype(np.float32)
                     c.paint(vent, albedo=mix((0.05, 0.05, 0.06), (0.3, 0.31, 0.35), slats))
                     c.H -= vent * slats * 3
-    # Gate markers north and south (column 4).
+    # Gates in column 4: hazard sills, pylons and a pool of colour showing which way traffic runs.
+    py_lift = round((60 - ROAD_GROUND) * OBLIQUE)
+    for y0, code, entrance in ((py_lift + 1, 516, True), (c.h - 40, 1028, False)):
+        for x0 in (4 * T - 26, 5 * T - 4):
+            c.block(c.rrect(x0, y0, x0 + 30, y0 + 38, 5), 60, 4, (0.3, 0.32, 0.37), 0.6)
+            c.paint(c.disc(x0 + 15, y0 + 19, 9)[0], albedo=(0.02, 0.02, 0.03))
+        gate_arrows(c, code, entrance, reach=0.3, opacity=0.8)
     for y0 in (0, c.h - 16):
-        hazard(c, c.rect(4 * T + 6, y0, 5 * T - 6, y0 + 16, 1)[0], 16)
-    c.ground = 23  # height of the playing surface
+        hazard(c, c.rect(4 * T + 2, y0, 5 * T - 2, y0 + 16, 1)[0], 16)
+        c.H = np.where(c.rect(4 * T + 2, y0, 5 * T - 2, y0 + 16, 1)[0] > 0.5, ROAD_GROUND, c.H)
+    c.ground = ROAD_GROUND
     return c
 
 
-# ---- Sky Tower: stone citadel above the clouds, glowing core -------------------------------------
+# ---- Sky Tower: stone citadel floating above the clouds, lava core --------------------------------
 
-SKY_OBSTACLES = [(3, 1, 3, 1), (14, 1, 3, 1), (4, 2, 1, 2), (15, 2, 1, 2), (4, 5, 1, 2), (9, 5, 2, 2),
-                 (15, 5, 1, 2), (4, 8, 1, 2), (15, 8, 1, 2), (3, 10, 3, 1), (14, 10, 3, 1)]
+SKY_SHAPES = (      # battlements, as the union of each one's obstacle rects from maps.ts
+    ((3, 1, 3, 1), (4, 2, 1, 2)), ((14, 1, 3, 1), (15, 2, 1, 2)),
+    ((4, 5, 1, 2),), ((15, 5, 1, 2),),
+    ((4, 8, 1, 2), (3, 10, 3, 1)), ((15, 8, 1, 2), (14, 10, 3, 1)),
+)
+SKY_ENTRANCES = (771, 264)
+SKY_EXITS = (259, 776)
+SKY_GROUND = 63
+SKY_PIT_R = T * 0.68
+
+
+def along_outline(c, inside):
+    """Position along the nearest straight edge of a shape, from its inside-distance field."""
+    gy, gx = np.gradient(inside)
+    return np.where(np.abs(gx) > np.abs(gy), c.y, c.x)
 
 
 def skytower_level():
     c = Canvas(20, 12)
-    # Clouds below everything.
-    cl = fbm(c.w, c.h, 220, 61, 5)
-    c.A[:] = palette_map(cl, [(0, (0.45, 0.55, 0.7)), (0.6, (0.78, 0.84, 0.92)), (1, (0.97, 0.98, 1.0))])
-    c.H[:] = cl * 10
-    c.S[:] = 0.0
-    # The deck: rounded slab inset from the map edge, with gates cut to the edges.
-    deck = c.rrect(T * 0.18, T * 0.18, c.w - T * 0.18, c.h - T * 0.18, T * 0.6, 3)
-    stone = fbm(c.w, c.h, 30, 62, 4)
-    moss = smoothstep(0.55, 0.7, fbm(c.w, c.h, 120, 63))
-    rng = np.random.default_rng(64)
-    cell = T // 2
-    gx, gy = (c.x // cell).astype(int), (c.y // cell).astype(int)
-    fx, fy = c.x / cell - gx, c.y / cell - gy
-    shade = rng.random(4096).astype(np.float32)[gy * 64 + gx]
-    edge = np.minimum(np.minimum(fx, 1 - fx), np.minimum(fy, 1 - fy)) * cell
-    seam = smoothstep(1.5, 5, edge)
-    slab_col = palette_map(stone * 0.6 + shade * 0.4, [(0, (0.4, 0.42, 0.4)), (1, (0.7, 0.72, 0.68))])
-    slab_col = mix(slab_col, (0.3, 0.4, 0.22), moss * 0.6) * (0.45 + 0.55 * seam)[..., None]
-    c.block(deck, 60, 10, slab_col, 0.15)
-    c.H += deck[0] * (seam * 3 + stone * 2)
-    for code in (771, 264, 259, 776):
+    # Everything off the deck is see-through; the game draws drifting clouds underneath.
+    c.A[:] = (0.2, 0.2, 0.22)
+    c.H[:] = -60
+    x0, y0, x1, y1 = T * 0.5, T * 0.42, c.w - T * 0.5, c.h - T * 0.8
+    deck = c.rrect(x0, y0, x1, y1, T * 0.5, 2)
+    bridges = np.zeros((c.h, c.w), np.float32)
+    for code in SKY_ENTRANCES + SKY_EXITS:
         side, row = code >> 8, code & 255
-        x0, x1 = (0, T * 0.8) if side == 3 else (c.w - T * 0.8, c.w)
-        bridge = c.rect(x0, row * T + 10, x1, (row + 1) * T - 10, 2)
-        c.block(bridge, 60, 4, slab_col, 0.15)
-    # Battlements and the core.
-    for x, y, w, h in SKY_OBSTACLES:
-        if (x, y) == (9, 5):
-            ring = c.disc(10 * T, 6 * T, T * 0.92)
-            c.block(ring, 82, 8, (0.5, 0.52, 0.5), 0.3)
-            pit = c.disc(10 * T, 6 * T, T * 0.68)
-            c.H = np.where(pit[0] > 0.5, 64, c.H)
-            lava = fbm(c.w, c.h, 18, 65, 4)
-            c.paint(pit[0], albedo=(0.1, 0.03, 0.0),
-                    emit=palette_map(lava, [(0, (0.6, 0.08, 0.0)), (0.6, (1.0, 0.45, 0.05)), (1, (1.0, 0.9, 0.4))]))
-            continue
-        b = c.rrect(x * T + 8, y * T + 8, (x + w) * T - 8, (y + h) * T - 8, 12)
-        c.block(b, 92, 10, palette_map(stone, [(0, (0.45, 0.47, 0.45)), (1, (0.75, 0.77, 0.73))]), 0.2)
-        crenel = (np.mod(c.x + c.y, 46) < 23).astype(np.float32)
-        top = c.rrect(x * T + 18, y * T + 18, (x + w) * T - 18, (y + h) * T - 18, 8)[0]
-        c.H += top * crenel * 8
-    c.ground = 63  # height of the playing surface
+        bx0, bx1 = (-10, x0 + 30) if side == 3 else (x1 - 30, c.w + 10)
+        bridges = np.maximum(bridges, c.rect(bx0, row * T + 12, bx1, (row + 1) * T - 12, 2)[0])
+    solid = np.maximum(deck[0], bridges)
+    c.open_mask = 1 - solid
+    # Big dressed slabs, one per tile, with soft joints and a little moss near the rim.
+    fx, fy = np.mod(c.x, T), np.mod(c.y, T)
+    edge = np.minimum(np.minimum(fx, T - fx), np.minimum(fy, T - fy))
+    seam = smoothstep(1, 4, edge)
+    col, row = np.floor(c.x / T), np.floor(c.y / T)
+    tone = np.mod(np.sin(col * 12.9898 + row * 78.233) * 43758.5, 1).astype(np.float32)
+    stone = fbm(c.w, c.h, 40, 62, 4)
+    slab = palette_map(np.clip(stone * 0.6 + tone * 0.25 + 0.08, 0, 1), [(0, (0.5, 0.51, 0.5)), (1, (0.68, 0.69, 0.67))])
+    rim_d = deck[1]
+    moss = smoothstep(0.52, 0.66, fbm(c.w, c.h, 130, 63)) * smoothstep(T * 1.8, T * 0.5, rim_d)
+    slab = mix(slab, (0.3, 0.4, 0.22), moss * 0.55) * (0.72 + 0.28 * seam)[..., None]
+    c.paint(solid, albedo=slab, spec=0.15)
+    c.H = np.where(solid > 0.5, 60 + seam * 2.5 + stone * 1.5, c.H)
+    # Inlaid roads between the bridges, and a gold-lined ring around the core.
+    road = np.zeros((c.h, c.w), np.float32)
+    for r in (3, 8):
+        road = np.maximum(road, smoothstep(T * 0.5, T * 0.46, np.abs(c.y - (r + 0.5) * T)))
+    c.paint(road * solid * 0.3, albedo=(0.24, 0.25, 0.28))
+    cx, cy = 10 * T, 6 * T
+    r = np.hypot(c.x - cx, c.y - cy)
+    c.paint(smoothstep(T * 1.7, T * 1.66, r) * 0.55, albedo=(0.28, 0.29, 0.33))
+    for rad in (T * 1.68, T * 1.38):
+        c.paint(smoothstep(4.5, 2.5, np.abs(r - rad)), albedo=(0.82, 0.62, 0.26), spec=0.7)
+    # A low parapet around the deck with merlons, open at the bridges.
+    parapet = (rim_d > 0) * (rim_d < 15) * (bridges < 0.5)
+    c.H = np.where(parapet, 72, c.H)
+    c.paint(parapet.astype(np.float32), albedo=(0.66, 0.67, 0.66), spec=0.2)
+    merlon = parapet * (np.mod(along_outline(c, rim_d), 52) < 26)
+    c.H = np.where(merlon, 78, c.H)
+    # Gate pillars on the deck edge; the game lights them green (entrance) or red (exit).
+    pil_lift = round((100 - SKY_GROUND) * OBLIQUE)
+    for code in SKY_ENTRANCES + SKY_EXITS:
+        side, row = code >> 8, code & 255
+        px = x0 + 22 if side == 3 else x1 - 22
+        for py in (row * T + 2, (row + 1) * T - 2 + pil_lift):
+            c.block(c.rrect(px - 17, py - 17, px + 17, py + 17, 4), 100, 4, (0.56, 0.57, 0.57), 0.3)
+            c.paint(c.disc(px, py, 8)[0], albedo=(0.04, 0.04, 0.05))
+        gate_arrows(c, code, code in SKY_ENTRANCES, reach=0.72, opacity=0.75)
+    # Battlements: one clean block per shape, with merlons around a recessed walkway.
+    wall = palette_map(stone, [(0, (0.5, 0.51, 0.5)), (1, (0.76, 0.77, 0.74))])
+    for shape in SKY_SHAPES:
+        inside = None
+        for x, y, w, h in shape:
+            d = c.rrect(x * T + 8, y * T + 8, (x + w) * T - 8, (y + h) * T - 8, 8)[1]
+            inside = d if inside is None else np.maximum(inside, d)
+        m = np.clip(0.5 + inside / 1.5, 0, 1)
+        c.block((m, inside), 92, 6, wall, 0.2)
+        walk = (inside > 18) * 1.0
+        c.H = np.where(walk > 0, 88, c.H)
+        c.paint(walk * 0.8, albedo=(0.34, 0.35, 0.36))
+        crest = (inside > 4) * (inside < 16) * (np.mod(along_outline(c, inside), 44) < 24)
+        c.H = np.where(crest, 99, c.H)
+        c.paint(crest * 0.4, albedo=(0.84, 0.85, 0.82))
+    # Crystal sockets on the battlements; the game makes them pulse.
+    for tx, ty in ((4.5, 1.5), (15.5, 1.5), (4.5, 6), (15.5, 6), (4.5, 10.5), (15.5, 10.5)):
+        c.block(c.disc(tx * T, ty * T, 13), 100, 3, (0.12, 0.13, 0.16), 0.7)
+    # The core: a stone ring around a pit of lava (animated on top by the lava_pit sprite).
+    c.block(c.disc(cx, cy, T * 0.92), 82, 8, (0.54, 0.55, 0.54), 0.3)
+    for a in range(12):
+        ang = a * math.tau / 12
+        c.block(c.disc(cx + math.cos(ang) * T * 0.8, cy + math.sin(ang) * T * 0.8, 9), 86, 2, (0.82, 0.62, 0.26), 0.7)
+    pit = c.disc(cx, cy, SKY_PIT_R)
+    c.H = np.where(pit[0] > 0.5, SKY_GROUND, c.H)
+    c.paint(pit[0], albedo=(0.1, 0.03, 0.0), emit=lava_colors(lava_field(c.x, c.y, 0.0)))
+    c.solid_shadow = True
+    c.ground = SKY_GROUND
     return c
+
+
+# ---- Animated pieces --------------------------------------------------------------------------
+
+def periodic_noise(size, beta, seed):
+    """Seamlessly tiling noise in 0..1, from random phases with a 1/f^beta spectrum."""
+    rng = np.random.default_rng(seed)
+    f = np.fft.fftfreq(size)
+    r = np.hypot(*np.meshgrid(f, f))
+    r[0, 0] = 1
+    spec = np.exp(1j * rng.uniform(0, math.tau, (size, size))) / r ** beta
+    spec[0, 0] = 0
+    n = np.fft.ifft2(spec).real
+    return ((n - n.min()) / np.ptp(n)).astype(np.float32)
+
+
+LAVA_TILE = 256
+_LAVA_NOISE = None
+
+
+def lava_field(x, y, t):
+    """Two crust layers sliding past each other; shifts of a whole tile make it loop over t in [0, 1)."""
+    global _LAVA_NOISE
+    if _LAVA_NOISE is None:
+        _LAVA_NOISE = periodic_noise(LAVA_TILE, 1.8, 65), periodic_noise(LAVA_TILE, 1.9, 66)
+    a, b = _LAVA_NOISE
+    xi, yi = x.astype(int), y.astype(int)
+    s = int(round(t * LAVA_TILE))
+    va = a[(yi + s) % LAVA_TILE, (xi + s // 2 * 2) % LAVA_TILE]
+    vb = b[(yi - s) % LAVA_TILE, (xi + s) % LAVA_TILE]
+    # Thin bright ridges where the crust cracks, over a slow swell of heat.
+    cracks = np.clip(1 - np.abs(va - 0.5) * 7, 0, 1) ** 1.5
+    return np.clip(vb * 0.75 - 0.08 + cracks * 0.62, 0, 1)
+
+
+def lava_colors(v):
+    return palette_map(v, [(0, (0.22, 0.02, 0.0)), (0.3, (0.5, 0.07, 0.0)), (0.5, (0.95, 0.3, 0.02)),
+                           (0.7, (1.0, 0.62, 0.1)), (1, (1.0, 0.92, 0.5))])
+
+
+def water_ripples(x, y, t):
+    r = np.hypot(x, y)
+    return np.sin(r / 2.6 - math.tau * 2 * t) * np.sin(np.arctan2(y, x) * 5 + r / 9)
+
+
+FOUNTAIN_CAM = dict(fw=140, fh=160, ox=70, oy=90)
+FOUNTAIN_FRAMES = 16
+
+
+def fountain_scene(p):
+    """The fountain's stonework (world px, ground at z=0). The moving water is `fountain_water`."""
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    parts = [
+        (cyl(p, 0, 0, 66, 0, 4, 1), M['steel']),
+        (np.maximum(cyl(p, 0, 0, 62, 0, 14, 2), -cyl(p, 0, 0, 53, 5, 30, 1)), M['marble']),
+        (cyl(p, 0, 0, 54, 0, 8, 0), M['pool']),
+        (cyl(p, 0, 0, 9, 0, 34, 1), M['marble']),
+        (cyl(p, 0, 0, 13, 7, 11, 1), M['marble']),
+        (np.maximum(ellipsoid(p, (0, 0, 37), (27, 27, 12)), z - 37), M['marble']),
+        (torus_z(p, 0, 0, 37, 25.5, 2.2), M['marble']),
+        (cyl(p, 0, 0, 24.5, 33, 36.2, 0), M['pool']),
+        (cyl(p, 0, 0, 4.5, 34, 54, 0.8), M['marble']),
+        (np.maximum(ellipsoid(p, (0, 0, 56), (13, 13, 6)), z - 56), M['marble']),
+        (torus_z(p, 0, 0, 56, 12, 1.3), M['marble']),
+        (cyl(p, 0, 0, 11, 53, 55.2, 0), M['pool']),
+        (sphere(p, (0, 0, 57), 2.4), M['gold']),
+    ]
+    for a in range(8):
+        ang = a * math.tau / 8
+        parts.append((sphere(p, (math.cos(ang) * 58, math.sin(ang) * 58, 15), 3.2), M['gold']))
+    return parts
+
+
+def fountain_water(w, h, t):
+    """One frame of the fountain's jets and ripples as RGBA; loops over t in [0, 1)."""
+    cam = FOUNTAIN_CAM
+    e = math.radians(55)
+    se, ce = math.sin(e), math.cos(e)
+    ppu = w / cam['fw']
+    rng = np.random.default_rng(71)
+    density = np.zeros((h, w), np.float32)
+
+    def splat(X, Y, Z, weight=1.0):
+        sx = ((cam['ox'] + X) * ppu).astype(int)
+        sy = ((cam['oy'] - (Y * se + Z * ce)) * ppu).astype(int)
+        ok = (sx >= 0) & (sx < w) & (sy >= 0) & (sy < h)
+        np.add.at(density, (sy[ok], sx[ok]), weight)
+
+    def stream(n, cycles, r0, r1, z0, peak, z1, spokes=0):
+        """`n` drops on parabolas from radius r0, height z0 up to `peak` and down to (r1, z1)."""
+        phase = rng.random(n)
+        ang = rng.uniform(0, math.tau, n) if spokes == 0 else rng.integers(0, spokes, n) * math.tau / spokes
+        ang = ang + rng.normal(0, 0.03, n)
+        u = np.mod(cycles * t + phase, 1)
+        r = r0 + (r1 - r0) * u
+        # Quadratic through (0, z0), the peak and (1, z1).
+        a = 2 * z0 + 2 * z1 - 4 * peak
+        b = 4 * peak - 3 * z0 - z1
+        z = a * u * u + b * u + z0
+        splat(np.cos(ang) * r, np.sin(ang) * r, z)
+
+    stream(700, 3, 0.5, 9, 58, 102, 56)             # central jet
+    stream(420, 3, 11.5, 15, 56, 57, 38)            # overflow from the top bowl
+    stream(1100, 3, 25.5, 31, 37, 38, 9)            # overflow from the middle bowl
+    stream(720, 2, 57, 34, 16, 32, 9, spokes=8)     # spouts on the rim, arcing inwards
+    glow = blur(density, 1.1)
+    water = np.clip(glow * 4.5, 0, 0.95)
+    # Ripples spreading over the basin and the middle bowl, hidden behind the bowl above.
+    py, px = np.mgrid[0:h, 0:w].astype(np.float32)
+    X = px / ppu - cam['ox']
+    for z, r_in, r_out, cycles_gain, top in ((8, 30, 53, 0.34, False), (36, 8, 24, 0.26, True)):
+        Y = (cam['oy'] - py / ppu - z * ce) / se
+        r = np.hypot(X, Y)
+        ring = smoothstep(r_out, r_out - 2, r) * smoothstep(r_in - 2, r_in + 2, r)
+        if not top:
+            ring = ring * (1 - smoothstep(30, 27, np.hypot(X, (py / ppu - (cam['oy'] - 36 * ce)) / se)))
+        glint = smoothstep(0.35, 0.9, water_ripples(X, Y, t))
+        water = np.maximum(water, glint * ring * cycles_gain)
+    rgb = np.ones((h, w, 3), np.float32) * np.array([0.86, 0.95, 1.0], np.float32)
+    return np.dstack([rgb * 255, water * 255]).round().clip(0, 255).astype(np.uint8)
+
+
+def cloud_tile(w, h, layer):
+    """Seamless clouds: an opaque blue sky ('far') or scattered white banks with alpha ('near')."""
+    n = periodic_noise(h, 1.45 if layer == 'far' else 1.3, 81 if layer == 'far' else 82)
+    if layer == 'far':
+        col = palette_map(n, [(0, (0.3, 0.5, 0.78)), (0.45, (0.47, 0.67, 0.9)), (0.62, (0.76, 0.86, 0.96)),
+                              (0.8, (0.95, 0.97, 1.0)), (1, (1.0, 1.0, 1.0))])
+        return np.dstack([col * 255, np.full((h, w), 255.0)]).round().astype(np.uint8)
+    a = smoothstep(0.52, 0.72, n) * 0.92
+    shade = palette_map(np.clip((n - 0.52) / 0.3, 0, 1), [(0, (0.8, 0.85, 0.93)), (1, (1.0, 1.0, 1.0))])
+    return np.dstack([shade * 255, a * 255]).round().clip(0, 255).astype(np.uint8)
+
+
+def dust_puff(w, h):
+    """A soft, lumpy puff of sand, drawn stretched and faded by the game."""
+    n = periodic_noise(h, 1.2, 91)
+    py, px = np.mgrid[0:h, 0:w].astype(np.float32)
+    r = np.hypot((px - w / 2) / (w / 2), (py - h / 2) / (h / 2))
+    a = np.clip(1 - r, 0, 1) ** 1.5 * (0.45 + 0.9 * n)
+    col = np.array([0.95, 0.88, 0.72], np.float32)
+    return np.dstack([np.ones((h, w, 3), np.float32) * col * 255, np.clip(a, 0, 1) * 255]).round().astype(np.uint8)
 
 
 # ---- Export -----------------------------------------------------------------------------------
@@ -868,7 +1227,7 @@ LEVELS = {
 
 
 class _Draw:
-    """Picklable sprite job for build.py: renders a VR tile or courtyard overlay."""
+    """Picklable sprite job for build.py: renders a VR tile, overlay or animation frame."""
 
     def __init__(self, kind, *args):
         self.kind, self.args = kind, args
@@ -883,7 +1242,15 @@ class _Draw:
             frames = water_source()
             img = frames[int(round(t * len(frames)))]
             return img[y0 * PPU:y1 * PPU, x0 * PPU:x1 * PPU]
-        sid, x, y, ow, oh = self.args
+        if self.kind == 'lava':
+            return lava_frame(w, h, *self.args)
+        if self.kind == 'fountain_water':
+            return fountain_water(w, h, *self.args)
+        if self.kind == 'clouds':
+            return cloud_tile(w, h, *self.args)
+        if self.kind == 'dust':
+            return dust_puff(w, h)
+        x, y, ow, oh = self.args
         rgb, mask = courtyard_overlay_source()
         x0, y0 = x * PPU, y * PPU
         crop = rgb[y0:y0 + oh * PPU, x0:x0 + ow * PPU]
@@ -917,6 +1284,22 @@ def water_source():
     return _WATER
 
 
+LAVA_FRAMES = 16
+LAVA_BOX = (648, 368, 104, 104)     # world px; maps.ts places the sprite at the same spot
+
+
+def lava_frame(w, h, t):
+    """One frame of the Sky Tower's lava, masked to the part of the pit the ring leaves in view."""
+    x0, y0 = LAVA_BOX[0] * PPU, LAVA_BOX[1] * PPU
+    py, px = np.mgrid[y0:y0 + h, x0:x0 + w].astype(np.float32)
+    rgb = lava_colors(lava_field(px, py, t))
+    cx, cy = 10 * T, 6 * T
+    lift = (82 - SKY_GROUND) * OBLIQUE
+    r = np.maximum(np.hypot(px - cx, py - cy), np.hypot(px - cx, py - cy + lift))
+    a = smoothstep(SKY_PIT_R, SKY_PIT_R - 3, r)
+    return np.dstack([np.clip(rgb, 0, 1) ** (1 / 1.1) * 255, a * 255]).round().clip(0, 255).astype(np.uint8)
+
+
 def sprite_sheets():
     s = {
         'mixer_1x1': dict(size=(70, 70), frames=[dict(draw=_Draw('vr', '1x1'))]),
@@ -937,20 +1320,45 @@ def sprite_sheets():
     sx0, sy0, sx1, sy1 = WATER_SIDE
     s['water_side'] = dict(size=(sx1 - sx0, sy1 - sy0), frames=[
         dict(draw=_Draw('water', WATER_SIDE, f / WATER_FRAMES)) for f in range(WATER_FRAMES)])
-    for sid, x, y, w, h in COURTYARD_ARCHES:
-        # The sprite also covers the lintel's lifted top, above its footprint.
-        top = max(0, y - ARCH_LIFT)
-        s[sid] = dict(size=(w, h + y - top), frames=[dict(draw=_Draw('court', sid, x, top, w, h + y - top))])
+    for sid, col, north, _ in COURTYARD_ARCHES:
+        x, y = 70 * col - 6, ARCH_NORTH_Y if north else ARCH_SOUTH_Y
+        s[sid] = dict(size=(82, ARCH_H), frames=[dict(draw=_Draw('court', x, y, 82, ARCH_H))])
+    s['lava_pit'] = dict(size=LAVA_BOX[2:], frames=[dict(draw=_Draw('lava', f / LAVA_FRAMES)) for f in range(LAVA_FRAMES)])
+    s['fountain'] = dict(size=(FOUNTAIN_CAM['fw'], FOUNTAIN_CAM['fh']), frames=[
+        dict(scene=fountain_scene, cam=dict(FOUNTAIN_CAM), ground_shadow=0.3, shadow_radius=85)])
+    s['fountain_water'] = dict(size=(FOUNTAIN_CAM['fw'], FOUNTAIN_CAM['fh']), frames=[
+        dict(draw=_Draw('fountain_water', f / FOUNTAIN_FRAMES)) for f in range(FOUNTAIN_FRAMES)])
+    s['clouds_far'] = dict(size=(512, 512), frames=[dict(draw=_Draw('clouds', 'far'))])
+    s['clouds_near'] = dict(size=(512, 512), frames=[dict(draw=_Draw('clouds', 'near'))])
+    s['dust_puff'] = dict(size=(48, 48), frames=[dict(draw=_Draw('dust'))])
     return s
+
+
+def level_image(c):
+    """The finished map as RGB, or RGBA when parts of it are see-through (`c.open_mask`)."""
+    rgb = c.render()
+    if not hasattr(c, 'open_mask'):
+        return rgb
+    a = 1 - c.remap(c.open_mask)
+    if getattr(c, 'solid_shadow', False):
+        # The deck's soft shadow on the clouds, and bridges dissolving into them at the map edge.
+        fade = smoothstep(0, 50, np.minimum(c.x, c.w - c.x))
+        cast = blur(np.roll(np.roll(a, 34, 0), -22, 1), 18) * 0.42
+        rgb = (rgb * a[..., None]).round().astype(np.uint8)
+        a = np.maximum(a * fade, cast * (1 - a))
+    return np.dstack([rgb, (a * 255).round().clip(0, 255).astype(np.uint8)])
 
 
 def main():
     ids = sys.argv[1:] or list(LEVELS)
     out = os.path.join(ROOT, 'assets', 'levels')
     for lid in ids:
-        rgb = LEVELS[lid]().render()
-        Image.fromarray(rgb).save(os.path.join(out, f'{lid}.jpg'), quality=88, optimize=True, progressive=True)
-        print('saved', lid, rgb.shape)
+        img = level_image(LEVELS[lid]())
+        if img.shape[2] == 4:
+            Image.fromarray(img).save(os.path.join(out, f'{lid}.webp'), quality=90, alpha_quality=100, method=6)
+        else:
+            Image.fromarray(img).save(os.path.join(out, f'{lid}.jpg'), quality=88, optimize=True, progressive=True)
+        print('saved', lid, img.shape)
 
 
 if __name__ == '__main__':

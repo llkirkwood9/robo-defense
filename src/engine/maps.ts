@@ -61,6 +61,10 @@ export interface Obstacle {
 
 /** Ticks per water frame: one loop of the Basic map's water takes about 5 seconds. */
 const WATER_FRAME_TICKS = 9;
+/** Ticks per lava frame: one loop of the Sky Tower's lava takes about 8 seconds. */
+const LAVA_FRAME_TICKS = 15;
+/** Ticks per fountain frame: one loop of the fountain takes about 2 seconds. */
+const FOUNTAIN_FRAME_TICKS = 4;
 
 /** A sprite drawn at a fixed world position. */
 export interface Decoration {
@@ -71,13 +75,24 @@ export interface Decoration {
   frameTicks?: number;
 }
 
-/** World-pixel rectangle. */
-export interface WorldRect {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
+/** A glowing lamp at a fixed world position, drawn by the game so that it can change over time. */
+export interface MapLight {
+  x: number;
+  y: number;
+  /** RGB, 0-255. */
+  color: readonly [number, number, number];
+  /** Glow radius in world pixels. */
+  radius: number;
+  /** `blink` snaps on and off, `pulse` breathes smoothly. */
+  mode: 'steady' | 'blink' | 'pulse';
+  /** Ticks per on/off or breathing cycle. */
+  period: number;
+  /** Ticks into the cycle at tick 0. */
+  phase: number;
 }
+
+/** What shows around the map and through any see-through parts of its image. */
+export type MapBackdrop = 'stars' | 'clouds';
 
 export interface MapLayout {
   type: MapType;
@@ -92,8 +107,12 @@ export interface MapLayout {
   underlays: Decoration[];
   /** Drawn above units (e.g. archways units walk under). */
   overlays: Decoration[];
-  /** Areas (in world pixels) where the animated starfield shows through. */
-  starfield: WorldRect[];
+  backdrop: MapBackdrop;
+  /** The map image has transparent areas, so the backdrop must be drawn underneath all of it. */
+  seeThrough: boolean;
+  lights: MapLight[];
+  /** Occasional gusts of dust blow across the map. */
+  dust: boolean;
   /** Score multiplier in percent. */
   scoreMultiplier: number;
 }
@@ -138,16 +157,148 @@ function decodeEnds(start: number, end: number, width: number, height: number): 
   };
 }
 
-const toRect = (code: number): WorldRect => {
-  const left = (code >> 24) * GRID;
-  const top = ((code >> 16) & 255) * GRID;
-  return {
-    left,
-    top,
-    right: left + ((code >> 8) & 255) * GRID,
-    bottom: top + (code & 255) * GRID,
-  };
-};
+const ENTRANCE_COLOR = [70, 255, 120] as const;
+const EXIT_COLOR = [255, 70, 50] as const;
+
+/** A gate lamp: green for an entrance and red for an exit, breathing slowly. */
+const gateLamp = (x: number, y: number, entrance: boolean, radius = 18): MapLight => ({
+  x,
+  y,
+  color: entrance ? ENTRANCE_COLOR : EXIT_COLOR,
+  radius,
+  mode: 'pulse',
+  period: 50,
+  phase: x + y,
+});
+
+// World positions below match the art in tools/sprites/levels.py, lifted by the 3D view.
+
+const RUINS_LIGHTS: MapLight[] = [
+  gateLamp(21.5, 377.5, true),
+  gateLamp(21.5, 511.5, true),
+  gateLamp(678.5, 21.5, true),
+  gateLamp(791.5, 21.5, true),
+  gateLamp(1378.5, 377.5, false),
+  gateLamp(1378.5, 511.5, false),
+  gateLamp(678.5, 796.5, false),
+  gateLamp(791.5, 796.5, false),
+];
+
+/** Crystals on the battlements. */
+const SKY_CRYSTALS = [
+  [315, 94.5],
+  [1085, 94.5],
+  [315, 409.5],
+  [1085, 409.5],
+  [315, 724.5],
+  [1085, 724.5],
+] as const;
+
+const SKY_LIGHTS: MapLight[] = [
+  { x: 700, y: 420, color: [255, 120, 30], radius: 92, mode: 'pulse', period: 90, phase: 0 },
+  ...SKY_CRYSTALS.map(([x, y]): MapLight => ({
+    x,
+    y,
+    color: [90, 200, 255],
+    radius: 20,
+    mode: 'pulse',
+    period: 70,
+    phase: x + y,
+  })),
+  // The bridges on rows 3 and 8: west to east on row 3, east to west on row 8.
+  ...[3, 8].flatMap((row) => [
+    gateLamp(43.5, row * GRID - 9.5, row === 3),
+    gateLamp(43.5, (row + 1) * GRID - 1, row === 3),
+    gateLamp(1356.5, row * GRID - 9.5, row === 8),
+    gateLamp(1356.5, (row + 1) * GRID - 1, row === 8),
+  ]),
+];
+
+const ROAD_OBSTACLES = [
+  0x3010101, 0x6010102, 0x2030101, 0x5030101, 0x3040201, 0x2050101, 0x3060201, 0x6060201, 0x2070101,
+  0x5070101, 0x1090101, 0x4090101, 0x6090101, 0x20a0101, 0x50a0101, 0x20b0401, 0x60c0101, 0x20d0401,
+  0x20e0101, 0x50e0101, 0x10f0101, 0x30f0101, 0x60f0101, 0x2110101, 0x5110101, 0x3120101, 0x6120201,
+  0x2130101, 0x4130201, 0x3140101, 0x2150401, 0x6160103, 0x1170201, 0x2180101,
+];
+/** Cut-outs in the Roadway's image (x, y, w, h in tiles), matching ROAD_SKY in levels.py. */
+const ROAD_SKY = [
+  [0, 0, 2, 1],
+  [6, 0, 3, 1],
+  [0, 1, 1, 2],
+  [8, 1, 1, 1],
+  [8, 5, 1, 8],
+  [0, 8, 1, 9],
+  [8, 20, 1, 6],
+  [0, 22, 1, 4],
+  [1, 25, 2, 1],
+  [6, 25, 2, 1],
+] as const;
+const ROAD_LAMP_COLORS = [
+  [60, 225, 255],
+  [255, 70, 190],
+  [80, 255, 130],
+  [255, 75, 60],
+  [170, 110, 255],
+  [255, 180, 50],
+  [70, 130, 255],
+] as const;
+/** World pixels the lids of the Roadway's machinery are lifted by the 3D view. */
+const ROAD_LAMP_LIFT = 10.6;
+
+/**
+ * The Roadway's lamps: one on most machinery cells (the same cells as `road_has_lamp` in
+ * levels.py) in assorted colours, a third of them blinking and a third breathing, plus running
+ * lights chasing along the deck's edges and a pair of lamps at each gate.
+ */
+function roadwayLights(): MapLight[] {
+  const lights: MapLight[] = [];
+  for (const o of ROAD_OBSTACLES.map(decodeObstacle)) {
+    for (let x = o.x; x < o.x + o.w; x++) {
+      for (let y = o.y; y < o.y + o.h; y++) {
+        if ((x * 5 + y * 3) % 4 === 0) {
+          continue;
+        }
+        const style = (x + 2 * y) % 3;
+        lights.push({
+          x: (x + 0.5) * GRID,
+          y: (y + 0.5) * GRID - ROAD_LAMP_LIFT,
+          color: ROAD_LAMP_COLORS[(x * 3 + y * 5) % ROAD_LAMP_COLORS.length],
+          radius: 15,
+          mode: style === 0 ? 'blink' : style === 1 ? 'pulse' : 'steady',
+          period: 36 + ((x * 11 + y * 7) % 5) * 12,
+          phase: x * 13 + y * 29,
+        });
+      }
+    }
+  }
+  const isSky = (cx: number, cy: number) =>
+    ROAD_SKY.some(([x, y, w, h]) => cx >= x && cx < x + w && cy >= y && cy < y + h);
+  for (let y = 0; y < 26; y += 2) {
+    for (const [sky, deck, x] of [
+      [0, 1, GRID + 7],
+      [8, 7, GRID * 8 - 7],
+    ] as const) {
+      if (isSky(sky, y) && !isSky(deck, y)) {
+        lights.push({
+          x,
+          y: (y + 0.5) * GRID,
+          color: [90, 190, 255],
+          radius: 8,
+          mode: 'blink',
+          period: 90,
+          phase: 90 - y * 5,
+        });
+      }
+    }
+  }
+  lights.push(
+    gateLamp(274.5, 21, true, 14),
+    gateLamp(355.5, 21, true, 14),
+    gateLamp(274.5, 1798.5, false, 14),
+    gateLamp(355.5, 1798.5, false, 14),
+  );
+  return lights;
+}
 
 interface StaticMap {
   width: number;
@@ -159,7 +310,10 @@ interface StaticMap {
   scoreMultiplier: number;
   underlays?: Decoration[];
   overlays?: Decoration[];
-  starfield?: number[];
+  backdrop?: MapBackdrop;
+  seeThrough?: boolean;
+  lights?: MapLight[];
+  dust?: boolean;
 }
 
 const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
@@ -184,6 +338,8 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     ends: [262, 1034],
     image: 'cross_level',
     scoreMultiplier: 125,
+    lights: RUINS_LIGHTS,
+    dust: true,
   },
   [MapType.Factory]: {
     width: 20,
@@ -198,15 +354,22 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     height: 12,
     starts: [774, 516, 1034, 527],
     ends: [262, 1028, 522, 1039],
-    obstacles: [67371521, 235143681, 67568129, 235340289],
+    // The four hedges, and the fountain in the middle.
+    obstacles: [67371521, 235143681, 67568129, 235340289, 151323138],
     image: 'courtyard_level',
     scoreMultiplier: 160,
+    underlays: [
+      { sprite: 'fountain', x: 630, y: 330 },
+      { sprite: 'fountain_water', x: 630, y: 330, frameTicks: FOUNTAIN_FRAME_TICKS },
+    ],
     // Archway lintels; the south ones reach 20px above their footprint (lifted by the 3D view).
     overlays: [
-      { sprite: 'courtyard_ne_overlay', x: GRID * 15 + 1, y: 0 },
-      { sprite: 'courtyard_nw_overlay', x: Math.trunc((GRID * 9) / 2) + 1, y: 0 },
-      { sprite: 'courtyard_sw_overlay', x: Math.trunc((GRID * 17) / 4) + 3, y: GRID * 11 - 17 },
-      { sprite: 'courtyard_se_overlay', x: GRID * 15 + 2, y: GRID * 11 - 17 },
+      { sprite: 'courtyard_nw_overlay', x: GRID * 4 - 6, y: 0 },
+      { sprite: 'courtyard_n_overlay', x: GRID * 10 - 6, y: 0 },
+      { sprite: 'courtyard_ne_overlay', x: GRID * 15 - 6, y: 0 },
+      { sprite: 'courtyard_sw_overlay', x: GRID * 4 - 6, y: GRID * 11 - 20 },
+      { sprite: 'courtyard_s_overlay', x: GRID * 10 - 6, y: GRID * 11 - 20 },
+      { sprite: 'courtyard_se_overlay', x: GRID * 15 - 6, y: GRID * 11 - 20 },
     ],
   },
   [MapType.Roadway]: {
@@ -214,19 +377,11 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     height: 26,
     starts: [516],
     ends: [1028],
-    obstacles: [
-      0x3010101, 0x6010102, 0x2030101, 0x5030101, 0x3040201, 0x2050101, 0x3060201, 0x6060201,
-      0x2070101, 0x5070101, 0x1090101, 0x4090101, 0x6090101, 0x20a0101, 0x50a0101, 0x20b0401,
-      0x60c0101, 0x20d0401, 0x20e0101, 0x50e0101, 0x10f0101, 0x30f0101, 0x60f0101, 0x2110101,
-      0x5110101, 0x3120101, 0x6120201, 0x2130101, 0x4130201, 0x3140101, 0x2150401, 0x6160103,
-      0x1170201, 0x2180101,
-    ],
+    obstacles: ROAD_OBSTACLES,
     image: 'roadway_level',
     scoreMultiplier: 100,
-    starfield: [
-      513, 100664065, 65794, 100729090, 134283521, 134545672, 524553, 34275585, 84607233, 34472193,
-      84803841, 135528710, 51708161, 1442052, 102170883, 35127554,
-    ],
+    seeThrough: true,
+    lights: roadwayLights(),
   },
   [MapType.SkyTower]: {
     width: 20,
@@ -239,6 +394,10 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     ],
     image: 'skytower_level',
     scoreMultiplier: 125,
+    backdrop: 'clouds',
+    seeThrough: true,
+    lights: SKY_LIGHTS,
+    underlays: [{ sprite: 'lava_pit', x: 648, y: 368, frameTicks: LAVA_FRAME_TICKS }],
   },
 };
 
@@ -261,7 +420,10 @@ export function createMapLayout(type: MapType, mixerCode = 0): MapLayout {
     image: def.image,
     underlays: def.underlays ?? [],
     overlays: def.overlays ?? [],
-    starfield: (def.starfield ?? []).map(toRect),
+    backdrop: def.backdrop ?? 'stars',
+    seeThrough: def.seeThrough ?? false,
+    lights: def.lights ?? [],
+    dust: def.dust ?? false,
     scoreMultiplier: def.scoreMultiplier,
   };
 }
@@ -315,7 +477,10 @@ function createVrTrainingLayout(code: number): MapLayout {
     image: 'mixer_level',
     underlays: [],
     overlays: [],
-    starfield: [],
+    backdrop: 'stars',
+    seeThrough: false,
+    lights: [],
+    dust: false,
     scoreMultiplier: 180,
   };
 
