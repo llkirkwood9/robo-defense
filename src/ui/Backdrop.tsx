@@ -21,11 +21,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { LevelImageId } from '@/engine/data/sprites';
-import { LEVEL_SOURCES } from '@/render/assets';
+import { LEVEL_PREVIEWS } from '@/render/assets';
 
-import { colors } from './theme';
-
-export function Backdrop({ level, dim = 0.55 }: { level: LevelImageId; dim?: number }) {
+export function Backdrop({ level, dim = 0.35 }: { level: LevelImageId; dim?: number }) {
   const drift = useSharedValue(0);
   const reduceMotion = useReducedMotion();
   useFocusEffect(
@@ -52,22 +50,21 @@ export function Backdrop({ level, dim = 0.55 }: { level: LevelImageId; dim?: num
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Animated.View style={[StyleSheet.absoluteFill, animated]}>
         <Image
-          source={LEVEL_SOURCES[level]}
+          source={LEVEL_PREVIEWS[level]}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
-          blurRadius={6}
           transition={600}
         />
       </Animated.View>
       <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(3,5,10,${dim})` }]} />
       <LinearGradient
-        colors={['rgba(5,7,13,0.95)', 'rgba(5,7,13,0.35)', 'rgba(5,7,13,0.0)']}
+        colors={['rgba(5,7,13,0.7)', 'rgba(5,7,13,0.2)', 'rgba(5,7,13,0.0)']}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 0.9, y: 0.5 }}
         style={StyleSheet.absoluteFill}
       />
       <LinearGradient
-        colors={['rgba(5,7,13,0)', colors.background]}
+        colors={['rgba(5,7,13,0)', 'rgba(5,7,13,0.55)']}
         start={{ x: 0.5, y: 0.6 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}

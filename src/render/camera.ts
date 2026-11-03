@@ -13,8 +13,11 @@ export interface ViewPadding {
   right: number;
 }
 
-/** Largest zoom: one grid cell this many points wide. */
-const MAX_CELL_POINTS = 84;
+/**
+ * Largest zoom: one grid cell this many points wide. The art has 140 pixels per cell, so this is
+ * about 2.4x its resolution on a 3x phone screen: soft when you look closely, but not blocky.
+ */
+const MAX_CELL_POINTS = 112;
 /** Default zoom for a new game: comfortable touch targets. */
 const DEFAULT_CELL_POINTS = 46;
 

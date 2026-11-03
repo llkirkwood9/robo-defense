@@ -117,10 +117,12 @@ export class Ambience {
         const x = x0 + wind * (i * 16 + t * 95) + (jitter(slot * 3 + i) - 0.5) * 34;
         const y = y0 + (jitter(slot * 5 + i) - 0.5) * 26 - t * 12;
         this.puffPaint.setAlphaf(0.62 * Math.sin(t * Math.PI));
-        canvas.drawImageRect(
+        canvas.drawImageRectOptions(
           image,
           src,
           Skia.XYWHRect(x - size, y - size * 0.55, size * 2, size * 1.1),
+          FilterMode.Linear,
+          MipmapMode.None,
           this.puffPaint,
         );
       }

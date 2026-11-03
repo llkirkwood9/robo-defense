@@ -5,7 +5,7 @@
  * paints the map, units, towers, projectiles and effects.
  */
 import type { SkCanvas, SkFont, SkImage, SkPaint } from '@shopify/react-native-skia';
-import { BlendMode, PaintStyle, Skia } from '@shopify/react-native-skia';
+import { BlendMode, FilterMode, MipmapMode, PaintStyle, Skia } from '@shopify/react-native-skia';
 
 import { GRID, GRID_HALF, JAM_RADIUS, SUB_SHIFT } from '@/engine/constants';
 import { PROJECTILES, ShotType } from '@/engine/data/projectiles';
@@ -173,10 +173,12 @@ export class WorldRenderer {
 
     // Map background (rendered at a higher resolution than the world, so scaled to fit it).
     const bg = images.level;
-    canvas.drawImageRect(
+    canvas.drawImageRectOptions(
       bg,
       Skia.XYWHRect(0, 0, bg.width(), bg.height()),
       Skia.XYWHRect(0, 0, mapW, mapH),
+      FilterMode.Linear,
+      MipmapMode.None,
       this.spritePaint,
     );
 
@@ -251,10 +253,13 @@ export class WorldRenderer {
       return;
     }
     const src = frameRect(sheet, frame);
-    canvas.drawImageRect(
+    // Filtered, or zooming in shows blocky pixels (a plain drawImageRect is nearest-neighbour).
+    canvas.drawImageRectOptions(
       sprites[id],
       Skia.XYWHRect(src.x, src.y, src.width, src.height),
       Skia.XYWHRect(x, y, sheet.frameWidth, sheet.frameHeight),
+      FilterMode.Linear,
+      MipmapMode.None,
       paint,
     );
   }
