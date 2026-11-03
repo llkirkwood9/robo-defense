@@ -20,6 +20,8 @@ import { Icon } from '@/ui/Icon';
 import { Text } from '@/ui/Text';
 import { colors, radii, spacing } from '@/ui/theme';
 
+const MENU_PRESS_ROOM = spacing.xl;
+
 const BACKDROPS: LevelImageId[] = [
   'basic_level',
   'cross_level',
@@ -117,6 +119,7 @@ export default function TitleScreen() {
 
         <Animated.View entering={MENU_ENTERING} style={styles.menuColumn}>
           <ScrollView
+            style={styles.menuScrollView}
             contentContainerStyle={styles.menuScroll}
             showsVerticalScrollIndicator={false}
           >
@@ -233,6 +236,11 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     justifyContent: 'center',
   },
+  // Wider than the buttons on each side: iOS glass buttons grow while held, and anything past the
+  // edge of the scroll view or glass group is cut off.
+  menuScrollView: {
+    marginHorizontal: -MENU_PRESS_ROOM,
+  },
   menuScroll: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -240,6 +248,7 @@ const styles = StyleSheet.create({
   },
   menu: {
     gap: spacing.md,
+    paddingHorizontal: MENU_PRESS_ROOM,
   },
   row: {
     flexDirection: 'row',

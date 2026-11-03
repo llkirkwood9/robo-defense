@@ -34,6 +34,7 @@ PORTRAITS = [
     (translate(enemies.helicopter(0.1), 0, 0, 0), 84, 44, 1.0),
     (enemies.jet(0.2), 76, 40, 1.0),
     (enemies.bomber(0.1), 84, 42, 1.0),
+    (enemies.arc_crawler(0.1), 64, 44, 1.0),
 ]
 
 

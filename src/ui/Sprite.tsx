@@ -3,6 +3,7 @@
  * menus and HUD controls (the game world itself is drawn with Skia).
  */
 import { Image } from 'expo-image';
+import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
@@ -10,6 +11,32 @@ import type { SpriteId } from '@/engine/data/sprites';
 import { SPRITES } from '@/engine/data/sprites';
 import type { TowerProps } from '@/engine/towers';
 import { SPRITE_SOURCES } from '@/render/assets';
+
+/**
+ * The whole sheet. Memoized so that stepping through frames never re-renders it: on iOS, any prop
+ * update reloads the image and cancels a load in progress, so a sprite animating at the game's
+ * rate could stay blank forever.
+ */
+const SheetImage = memo(function SheetImage({
+  sprite,
+  width,
+  height,
+  tintColor,
+}: {
+  sprite: SpriteId;
+  width: number;
+  height: number;
+  tintColor?: string;
+}) {
+  return (
+    <Image
+      source={SPRITE_SOURCES[sprite]}
+      style={{ width, height }}
+      contentFit="fill"
+      tintColor={tintColor}
+    />
+  );
+});
 
 /**
  * One frame of a sprite sheet, scaled so the frame is `width` points wide. `tintColor` paints every
@@ -38,19 +65,21 @@ export function SpriteFrame({
       pointerEvents="none"
       style={[{ width, height: sheet.frameHeight * scale, overflow: 'hidden' }, style]}
     >
-      <Image
-        source={SPRITE_SOURCES[sprite]}
+      <View
         style={{
-          width: sheet.frameWidth * sheet.columns * scale,
-          height: sheet.frameHeight * rows * scale,
           transform: [
             { translateX: -(frame % sheet.columns) * sheet.frameWidth * scale },
             { translateY: -Math.floor(frame / sheet.columns) * sheet.frameHeight * scale },
           ],
         }}
-        contentFit="fill"
-        tintColor={tintColor}
-      />
+      >
+        <SheetImage
+          sprite={sprite}
+          width={sheet.frameWidth * sheet.columns * scale}
+          height={sheet.frameHeight * rows * scale}
+          tintColor={tintColor}
+        />
+      </View>
     </View>
   );
 }

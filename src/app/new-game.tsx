@@ -72,9 +72,16 @@ export default function NewGameScreen() {
 
   return (
     <Screen backdrop={MAP_IMAGES[settings.mapType]} scroll={false} contentStyle={styles.content}>
-      <View style={styles.mapsColumn}>
+      {/* Each column scrolls by itself, so Start Game stays put while browsing the maps. Both inset
+          their content like Screen's own scroll view, clearing the see-through iOS header. */}
+      <ScrollView
+        style={styles.mapsColumn}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.mapsContent}
+      >
         <Text variant="heading">Map</Text>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.maps}>
+        <View style={styles.maps}>
           {Array.from({ length: MAP_COUNT }, (_, i) => {
             const selected = i === settings.mapType;
             const layout = layouts[i];
@@ -117,11 +124,14 @@ export default function NewGameScreen() {
               </Pressable>
             );
           })}
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
 
-      {/* Scrolls by itself on short screens, so Start Game stays put while browsing the maps. */}
-      <ScrollView style={styles.panelScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.panelScroll}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+      >
         <GlassSurface radius={radii.lg} style={styles.panel}>
           <View style={styles.field}>
             <Text variant="heading">Mode</Text>
@@ -213,6 +223,8 @@ const styles = StyleSheet.create({
   },
   mapsColumn: {
     flex: 1,
+  },
+  mapsContent: {
     gap: spacing.md,
   },
   maps: {

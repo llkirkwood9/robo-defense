@@ -42,6 +42,8 @@ import { generateWaves, NUM_LEVELS, survivalDifficulty, WaveRunner } from './wav
 export interface GameOptions {
   /** Drop out of fast-forward when a wave is cleared. */
   ffStopsBetweenLevels: boolean;
+  /** Drop out of fast-forward when a robot gets through. */
+  ffStopsOnLifeLost: boolean;
 }
 
 /** Choices made on the new-game screen. */
@@ -644,6 +646,9 @@ export class GameState implements World {
     this.health--;
     this.stats.livesLost++;
     this.services.emit({ type: 'lifeLost', health: this.health });
+    if (this.runState === RunState.FastForward && this.services.options.ffStopsOnLifeLost) {
+      this.runState = RunState.Running;
+    }
     if (this.health > 0) {
       this.levelBonus = 0;
     } else {

@@ -152,6 +152,7 @@ export class GameController {
         const o = profileStore.get().options;
         return {
           ffStopsBetweenLevels: o.ffStopsBetweenLevels,
+          ffStopsOnLifeLost: o.ffStopsOnLifeLost,
         };
       },
       emit: (event) => this.onGameEvent(event),

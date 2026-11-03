@@ -17,6 +17,27 @@ import { colors, radii, spacing } from '@/ui/theme';
 const selectPoints = (s: ReturnType<typeof profileStore.get>) => s.rewardPoints;
 const selectVersion = (s: ReturnType<typeof profileStore.get>) => s.rewardsVersion;
 
+/** One line of a levelled upgrade: what it does now, or what the next level would do. */
+function LevelRow({ label, level, text }: { label: string; level: string; text?: string | null }) {
+  return (
+    <View style={styles.levelRow}>
+      <Text variant="caption" style={styles.levelLabel}>
+        {label}
+      </Text>
+      <View style={styles.flex}>
+        <Text variant="label" color={colors.accent}>
+          {level}
+        </Text>
+        {text && (
+          <Text variant="body" color={colors.textDim}>
+            {text}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
 function RewardCard({ info }: { info: RewardInfo }) {
   const owned = info.isMaxed;
   const buy = () => {
@@ -31,10 +52,11 @@ function RewardCard({ info }: { info: RewardInfo }) {
           <Text variant="heading" color={owned ? colors.gold : colors.text}>
             {info.name}
           </Text>
-          <Text variant="caption" color={colors.accent}>
-            {info.blockedBy ??
-              (info.isUnlock ? (owned ? 'Unlocked' : 'One-time unlock') : `Next: ${info.status}`)}
-          </Text>
+          {info.isUnlock && (
+            <Text variant="caption" color={colors.accent}>
+              {info.blockedBy ?? (owned ? 'Unlocked' : 'One-time unlock')}
+            </Text>
+          )}
         </View>
         {owned ? (
           <Icon name="check" size={22} color={colors.success} />
@@ -48,9 +70,20 @@ function RewardCard({ info }: { info: RewardInfo }) {
           />
         )}
       </View>
-      <Text variant="body" color={colors.textDim}>
-        {info.description}
-      </Text>
+      {info.isUnlock ? (
+        <Text variant="body" color={colors.textDim}>
+          {info.description}
+        </Text>
+      ) : (
+        <View style={styles.levels}>
+          <LevelRow
+            label="NOW"
+            level={info.level > 0 ? `Level ${info.level}` : 'Not upgraded'}
+            text={info.currentDescription}
+          />
+          <LevelRow label="NEXT" level={`Level ${info.level + 1}`} text={info.description} />
+        </View>
+      )}
       {!owned && (
         <View style={styles.cost}>
           <Icon name="rewards" size={14} color={info.affordable ? colors.gold : colors.textFaint} />
@@ -120,6 +153,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+  levels: {
+    gap: spacing.sm,
+  },
+  levelRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  levelLabel: {
+    width: 36,
+    letterSpacing: 1,
+    lineHeight: 20,
   },
   cost: {
     flexDirection: 'row',

@@ -110,4 +110,5 @@ export const TITLE_SOURCES: number[] = [
   require('@/assets/title/title7_nobg.png'),
   require('@/assets/title/title8_nobg.png'),
   require('@/assets/title/title9_nobg.png'),
+  require('@/assets/title/title10_nobg.png'),
 ];

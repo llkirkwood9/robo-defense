@@ -53,7 +53,7 @@ enum Increase {
 interface RewardDef {
   key: string;
   name: string;
-  /** Description; levelled rewards contain `%d` for the next level's bonus. */
+  /** Description; levelled rewards contain `%d` for a level's bonus. */
   description: string;
   baseCost: number;
   multiplier: number;
@@ -210,9 +210,12 @@ export interface RewardLevels {
 export interface RewardInfo {
   type: Reward;
   name: string;
+  /** What buying this next does: an unlock's effect, or the next level's total bonus. */
   description: string;
-  /** Short status such as "Lvl 3" or "Unlocked". */
-  status: string;
+  /** Levels bought so far (1 for an owned unlock). */
+  level: number;
+  /** A levelled reward's total bonus at its current level; null until it has one. */
+  currentDescription: string | null;
   cost: number;
   isUnlock: boolean;
   isMaxed: boolean;
@@ -328,13 +331,14 @@ export class Rewards implements RewardLevels {
         ? 'Requires Mine Tower'
         : null;
     const cost = this.nextLevelCost(type);
+    const level = this.levels[type];
+    const atLevel = (l: number) => def.description.replace('%d', String(l * def.multiplier));
     return {
       type,
       name: def.name,
-      description: isUnlock
-        ? def.description
-        : def.description.replace('%d', String((this.levels[type] + 1) * def.multiplier)),
-      status: isUnlock ? (isMaxed ? 'Unlocked' : 'Locked') : `Lvl ${this.levels[type] + 1}`,
+      description: isUnlock ? def.description : atLevel(level + 1),
+      level,
+      currentDescription: !isUnlock && level > 0 ? atLevel(level) : null,
       cost,
       isUnlock,
       isMaxed,
