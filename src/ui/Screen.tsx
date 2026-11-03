@@ -32,7 +32,7 @@ export function Screen({
   };
   return (
     <View style={styles.root}>
-      <Backdrop level={backdrop} dim={0.7} />
+      <Backdrop level={backdrop} dim={0.45} />
       {scroll ? (
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"

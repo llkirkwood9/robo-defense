@@ -87,7 +87,7 @@ jobs:
           url=$(jq -r '.[0].artifacts.buildUrl' build.json)
           curl -sSL "$url" -o "robo-defense-${VERSION}.apk"
           gh release create "app-v${VERSION}" "robo-defense-${VERSION}.apk" \
-            --title "Robo Defense ${VERSION}" \
+            --title "Robo Defense Reloaded ${VERSION}" \
             --notes "Android app for phones and tablets. Download the APK on the device and open it to install or update. The same version goes to TestFlight for iPhones and iPads."
 
   ios:

@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -55,14 +55,22 @@ function Scrim({ children, onPress }: { children: React.ReactNode; onPress?: () 
 
 // ---- Start ------------------------------------------------------------------------------------
 
-const INSTRUCTIONS: { icon: 'shield' | 'bolt' | 'upgrade' | 'fastForward'; text: string }[] = [
+const INSTRUCTIONS: {
+  icon: 'shield' | 'bolt' | 'upgrade' | 'fastForward' | 'money' | 'star';
+  text: string;
+}[] = [
   { icon: 'shield', text: 'Stop the robots from crossing the map.' },
   {
     icon: 'bolt',
     text: 'Drag towers from the dock onto the map. Towers can reshape the path, but never block it.',
   },
   { icon: 'upgrade', text: 'Tap a tower to upgrade or sell it.' },
-  { icon: 'fastForward', text: 'Drag to scroll, pinch to zoom. Fast-forward when you’re ready.' },
+  {
+    icon: 'fastForward',
+    text: `Drag to move, ${Platform.OS === 'web' ? 'scroll' : 'pinch'} to zoom. Fast-forward when ready.`,
+  },
+  { icon: 'money', text: 'Cleared waves pay cash. Send waves early for more.' },
+  { icon: 'star', text: 'Every 10th wave brings a golden Elite: 5× HP, 5× cash.' },
 ];
 
 export function StartCard({ controller }: { controller: GameController }) {
@@ -173,6 +181,7 @@ function summaryRows(s: ScoreSummary): [string, number][] {
   if (s.wonBonus > 0) rows.push(['Victory bonus', s.wonBonus]);
   if (s.healthBonus > 0) rows.push(['Remaining health bonus', s.healthBonus]);
   if (s.moneyBonus > 0) rows.push(['Remaining money bonus', s.moneyBonus]);
+  if (s.waveBonus > 0) rows.push(['Waves survived bonus', s.waveBonus]);
   if (s.perfectBonus > 0) rows.push(['Perfect game bonus', s.perfectBonus]);
   return rows;
 }
@@ -200,7 +209,7 @@ export function GameOverCard({
   if (!result) {
     return null;
   }
-  const { summary, outcome, level, newBest } = result;
+  const { summary, outcome, level, newBest, stats } = result;
   const won = outcome === 'won';
   const rows = summary ? summaryRows(summary) : [];
   return (
@@ -220,6 +229,10 @@ export function GameOverCard({
             <Text variant="title">{TITLES[outcome]}</Text>
           </View>
           <Text variant="caption">{MESSAGES[outcome](level)}</Text>
+          <Text variant="caption">
+            {stats.kills.toLocaleString()} robots destroyed · {stats.towersBuilt} towers built ·{' '}
+            {stats.livesLost} {stats.livesLost === 1 ? 'life' : 'lives'} lost
+          </Text>
 
           {summary && (
             <View style={styles.summary}>
@@ -370,8 +383,8 @@ export function LevelBanner({ controller }: { controller: GameController }) {
       exiting={FadeOut.duration(400)}
       style={styles.banner}
     >
-      <Text variant="caption" style={styles.kicker}>
-        INCOMING
+      <Text variant="caption" style={[styles.kicker, banner.elite && styles.eliteKicker]}>
+        {banner.elite ? 'ELITE ROBOT INCOMING' : 'INCOMING'}
       </Text>
       <Text variant="display" style={styles.bannerText}>
         WAVE {banner.level}
@@ -540,6 +553,9 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     color: colors.accent,
     fontWeight: '700',
+  },
+  eliteKicker: {
+    color: colors.gold,
   },
   center: {
     textAlign: 'center',

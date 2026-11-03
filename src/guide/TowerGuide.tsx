@@ -37,6 +37,8 @@ const ORDER: Entry[] = [
   { type: TowerType.Gun1 },
   { type: TowerType.Gun2 },
   { type: TowerType.Gun3 },
+  { type: TowerType.Rail1 },
+  { type: TowerType.Rail2 },
   { type: TowerType.Command },
   { type: TowerType.Antiair1 },
   { type: TowerType.Antiair2 },
@@ -84,6 +86,10 @@ const BLURBS: Partial<Record<TowerType, string>> = {
   [TowerType.SurfaceAir2]: 'Devastating missiles for late-game air raids.',
   [TowerType.Mortar]: 'Lobs shells a long way onto ground robots.',
   [TowerType.Artillery]: 'The longest reach in your arsenal. Ground targets only.',
+  [TowerType.Rail1]:
+    'Charges for 2.5 seconds, then fires a slug that ignores armor and hits every robot in a straight line, in the air or on the ground. Build it to look down your longest corridor.',
+  [TowerType.Rail2]:
+    'A far heavier slug for the same charge time. Tears through whole columns of robots.',
   [TowerType.Slow1]: 'Slows robots down so your other towers get more shots.',
   [TowerType.Slow2]: 'Slows robots more often and for longer.',
   [TowerType.Slow3]: 'The strongest, fastest-cycling slow tower.',

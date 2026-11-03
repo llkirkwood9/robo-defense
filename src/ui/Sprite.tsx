@@ -30,6 +30,7 @@ export function SpriteFrame({
 }) {
   const sheet = SPRITES[sprite];
   const scale = width / sheet.frameWidth;
+  const rows = Math.ceil(sheet.frames / sheet.columns);
   return (
     // Decorative: never the touch target (lets drags start on the parent, and avoids the browser's
     // native image dragging on web).
@@ -40,9 +41,12 @@ export function SpriteFrame({
       <Image
         source={SPRITE_SOURCES[sprite]}
         style={{
-          width: sheet.frameWidth * sheet.frames * scale,
-          height: sheet.frameHeight * scale,
-          transform: [{ translateX: -frame * sheet.frameWidth * scale }],
+          width: sheet.frameWidth * sheet.columns * scale,
+          height: sheet.frameHeight * rows * scale,
+          transform: [
+            { translateX: -(frame % sheet.columns) * sheet.frameWidth * scale },
+            { translateY: -Math.floor(frame / sheet.columns) * sheet.frameHeight * scale },
+          ],
         }}
         contentFit="fill"
         tintColor={tintColor}

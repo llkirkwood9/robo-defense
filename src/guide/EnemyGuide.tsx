@@ -7,7 +7,7 @@ import Slider from '@react-native-community/slider';
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Dir, GRID_SUB, TICKS_PER_SECOND } from '@/engine/constants';
+import { Dir, GRID, GRID_SUB, JAM_RADIUS, JAM_TICKS, TICKS_PER_SECOND } from '@/engine/constants';
 import { SPRITES } from '@/engine/data/sprites';
 import {
   ENEMIES,
@@ -43,6 +43,7 @@ const BLURBS: Record<EnemyType, string> = {
   [EnemyType.Bomber]: 'A slow, heavy aircraft that soaks up a lot of fire.',
   [EnemyType.Titan]: `A colossal walker. Appears only after ${PERFECT_LEVELS_FOR_TITAN} waves in a row without losing a life.`,
   [EnemyType.Dropper]: 'A flying carrier that drops soldiers onto the path as it goes.',
+  [EnemyType.ArcCrawler]: `A crab with a coil on its back. Its pulses stop every tower within ${JAM_RADIUS / GRID} tiles firing for ${JAM_TICKS / TICKS_PER_SECOND} seconds, so hit it from long range.`,
 };
 
 const FLYER_NOTE = 'Immune to flame, mortar and artillery.';
@@ -235,7 +236,8 @@ export function EnemyGuide() {
           </Text>
           <Text variant="caption">
             Hit points grow with each wave and difficulty level. Armor is subtracted from every hit,
-            so weak shots may do little damage.
+            so weak shots may do little damage. Every 10th wave is led by a golden Elite with 5× hit
+            points that pays 5× cash.
           </Text>
         </View>
         <ScaleControl label="Wave" value={wave} min={1} max={NUM_LEVELS} onChange={setWave} />

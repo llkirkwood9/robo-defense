@@ -38,9 +38,12 @@ export enum TowerType {
   Flare = 22,
   /** Not in the original: sets targeting for every tower and boosts nearby towers' range. */
   Command = 23,
+  /** Not in the original: fires a slug through every robot in a straight line. */
+  Rail1 = 24,
+  Rail2 = 25,
 }
 
-export const TOWER_TYPE_COUNT = 24;
+export const TOWER_TYPE_COUNT = 26;
 
 /** How a tower picks its target. Without a Command Tower every tower uses `First`. */
 export enum TargetMode {
@@ -186,9 +189,13 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
   define(TowerType.Gun2, 'Medium Gun', 'gun_tower2', {
     shotType: ShotType.Bullet,
     downgrade: TowerType.Gun1,
-    upgrades: [TowerType.Gun3, has(Reward.CommandTowerUnlocked) ? TowerType.Command : -1, -1],
+    upgrades: [
+      TowerType.Gun3,
+      TowerType.Rail1,
+      has(Reward.CommandTowerUnlocked) ? TowerType.Command : -1,
+    ],
     cost: 4,
-    shotDelay: 6,
+    shotDelay: 5,
     radius: 18,
     power: r.apply(2, Reward.BulletUpgrade),
     notes: [bulletNote, null],
@@ -197,7 +204,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     shotType: has(Reward.UraniumShells) ? ShotType.UraniumBullet : ShotType.BigBullet,
     downgrade: TowerType.Gun2,
     cost: 6,
-    shotDelay: 6,
+    shotDelay: 4,
     radius: 18,
     power: r.apply(3, Reward.BulletUpgrade),
     notes: [bulletNote, null],
@@ -291,7 +298,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     shotType: ShotType.Rocket,
     upgrades: [TowerType.Rocket2, TowerType.Mortar, TowerType.SurfaceAir1],
     cost: 20,
-    shotDelay: r.apply(70, Reward.RocketSpeedUpgrade),
+    shotDelay: r.apply(55, Reward.RocketSpeedUpgrade),
     radius: 35,
     power: r.apply(17, Reward.ExplosivesUpgrade),
     notes: rocketNotes,
@@ -301,7 +308,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     downgrade: TowerType.Rocket1,
     upgrades: [TowerType.Rocket3, -1, -1],
     cost: 30,
-    shotDelay: r.apply(55, Reward.RocketSpeedUpgrade),
+    shotDelay: r.apply(50, Reward.RocketSpeedUpgrade),
     radius: 35,
     power: r.apply(32, Reward.ExplosivesUpgrade),
     notes: rocketNotes,
@@ -310,7 +317,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     shotType: ShotType.Rocket,
     downgrade: TowerType.Rocket2,
     cost: 50,
-    shotDelay: r.apply(50, Reward.RocketSpeedUpgrade),
+    shotDelay: r.apply(45, Reward.RocketSpeedUpgrade),
     radius: 35,
     power: r.apply(50, Reward.ExplosivesUpgrade),
     notes: rocketNotes,
@@ -344,7 +351,7 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     downgrade: TowerType.Rocket1,
     upgrades: [TowerType.Artillery, -1, -1],
     cost: 50,
-    shotDelay: r.apply(90, Reward.ArtillerySpeedUpgrade),
+    shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
     radius: 45,
     power: r.apply(35, Reward.ExplosivesUpgrade),
     notes: artilleryNotes,
@@ -354,9 +361,32 @@ function createTowerProps(r: RewardLevels & { towerNote(t: Reward): string | nul
     gunRadius: 1,
     downgrade: TowerType.Mortar,
     cost: 90,
-    shotDelay: r.apply(90, Reward.ArtillerySpeedUpgrade),
+    shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
     radius: 55,
     power: r.apply(70, Reward.ExplosivesUpgrade),
+    notes: artilleryNotes,
+  });
+
+  // Rail guns: slow, armor-piercing shots that reward lining robots up.
+  define(TowerType.Rail1, 'Rail Cannon', 'rail_tower', {
+    shotType: ShotType.Rail,
+    downgrade: TowerType.Gun2,
+    upgrades: [TowerType.Rail2, -1, -1],
+    cost: 60,
+    shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
+    radius: 45,
+    power: r.apply(40, Reward.ExplosivesUpgrade),
+    gunRadius: 30,
+    notes: artilleryNotes,
+  });
+  define(TowerType.Rail2, 'Mass Driver', 'rail_tower2', {
+    shotType: ShotType.Rail,
+    downgrade: TowerType.Rail1,
+    cost: 100,
+    shotDelay: r.apply(75, Reward.ArtillerySpeedUpgrade),
+    radius: 45,
+    power: r.apply(85, Reward.ExplosivesUpgrade),
+    gunRadius: 30,
     notes: artilleryNotes,
   });
 

@@ -6,16 +6,28 @@
  */
 import { Achievement } from './achievements';
 import type { AchievementSink } from './achievements';
-import { Dir, GRID, GRID_HALF, GRID_SUB, GRID_SUB_HALF, SUB_SHIFT } from './constants';
+import {
+  Dir,
+  ELITE_VALUE_MULTIPLIER,
+  GRID,
+  GRID_HALF,
+  GRID_SUB,
+  GRID_SUB_HALF,
+  JAM_IMMUNE_TICKS,
+  JAM_RADIUS,
+  JAM_TICKS,
+  SUB_SHIFT,
+} from './constants';
 import {
   isMissile,
   isShell,
   MINE_RADIUS_SQ,
   PROJECTILES,
+  RAIL_HALF_WIDTH,
   ShotType,
   SPLASH_RADIUS_SQ,
 } from './data/projectiles';
-import type { Explosion, Particle } from './effects';
+import type { Explosion, JamPulse, Particle, RailBeam } from './effects';
 import { ExplosionType, explosionSize, makeExplosion } from './effects';
 import { ENEMIES, enemyDropDelay, EnemyType } from './enemies';
 import type { MapLayout } from './maps';
@@ -46,6 +58,8 @@ export interface World {
   readonly effectCount: number;
   addParticle(p: Particle): void;
   addExplosion(e: Explosion): void;
+  addJamPulse(p: JamPulse): void;
+  addRailBeam(b: RailBeam): void;
   dropUnit(type: EnemyType, x: number, y: number, dir: Dir, path: number): void;
   /** Tower state changed without affecting paths (refreshes upgrade UI). */
   towerChanged(): void;
@@ -107,6 +121,8 @@ export interface EnemyState {
   orientation: Dir;
   atExit: boolean;
   exitingGrid: boolean;
+  /** Absent in older saves. */
+  elite?: boolean;
 }
 
 export class Enemy implements EnemyState {
@@ -129,7 +145,10 @@ export class Enemy implements EnemyState {
   exitingGrid = true;
   /** Tick the enemy died on, or -1 while alive. */
   deathTick = -1;
+  /** A wave leader with more hit points and a bigger bounty. */
+  elite = false;
   private dropCounter = 0;
+  private jamCounter = 0;
   readonly flames: Flame[] = Array.from({ length: FLAME_COUNT }, () => new Flame());
 
   static spawn(
@@ -140,14 +159,17 @@ export class Enemy implements EnemyState {
     tick: number,
     health: number,
     path: number,
+    elite = false,
   ): Enemy {
     const e = new Enemy();
     e.type = type;
+    e.elite = elite;
     e.firstState = tick;
     e.health = health;
     e.maxHealth = health;
     e.pathNum = path;
     e.dropCounter = enemyDropDelay(type);
+    e.jamCounter = e.props.jamDelay;
     e.teleportTo(x, y, dir);
     return e;
   }
@@ -155,11 +177,17 @@ export class Enemy implements EnemyState {
   static restore(s: EnemyState): Enemy {
     const e = Object.assign(new Enemy(), s);
     e.dropCounter = enemyDropDelay(e.type);
+    e.jamCounter = e.props.jamDelay;
     return e;
   }
 
   get props() {
     return ENEMIES[this.type];
+  }
+
+  /** Cash awarded for destroying this robot. */
+  get bounty(): number {
+    return this.props.value * (this.elite ? ELITE_VALUE_MULTIPLIER : 1);
   }
 
   /** Top-left of the enemy's grid-sized footprint, in world pixels. */
@@ -169,6 +197,15 @@ export class Enemy implements EnemyState {
 
   get pixelY(): number {
     return this.gridY * GRID + (this.yOffset >> SUB_SHIFT);
+  }
+
+  /** Middle of the robot as drawn: flyers appear well above their footprint. */
+  get drawnCenterX(): number {
+    return this.pixelX + this.props.drawShiftX + this.props.centerX;
+  }
+
+  get drawnCenterY(): number {
+    return this.pixelY + this.props.drawShiftY + this.props.centerY;
   }
 
   get finished(): boolean {
@@ -252,7 +289,34 @@ export class Enemy implements EnemyState {
         this.dropCounter = enemyDropDelay(this.type);
       }
     }
+    if (this.props.jamDelay > 0) {
+      if (this.jamCounter > 0) {
+        this.jamCounter--;
+      } else if (this.tryJam(world)) {
+        this.jamCounter = this.props.jamDelay;
+      }
+    }
     return this.atExit;
+  }
+
+  /** Pulses if that would jam at least one tower; otherwise holds the charge. */
+  private tryJam(world: World): boolean {
+    const x = this.pixelX + GRID_HALF;
+    const y = this.pixelY + GRID_HALF;
+    let jammed = false;
+    for (const t of world.towers) {
+      const dx = t.gridX * GRID + GRID_HALF - x;
+      const dy = t.gridY * GRID + GRID_HALF - y;
+      if (dx * dx + dy * dy <= JAM_RADIUS * JAM_RADIUS && t.jam(world.tick)) {
+        jammed = true;
+      }
+    }
+    if (jammed) {
+      world.addJamPulse({ tick: world.tick, x, y });
+      // Borrows the ice tower's zap.
+      world.shotFired(ShotType.Slow);
+    }
+    return jammed;
   }
 
   private tryDrop(world: World, grid: MovementGrid): boolean {
@@ -289,7 +353,8 @@ export class Enemy implements EnemyState {
       return;
     }
     if (shot === ShotType.Fire || shot === ShotType.SlowFire) {
-      this.fireCounter = Math.min(this.fireCounter + 4, amount);
+      // Burn added per shot grows with the tower, so upgrading a flame tower adds real damage.
+      this.fireCounter = Math.min(this.fireCounter + Math.trunc(amount / 10), amount);
       if (shot === ShotType.SlowFire && this.slowCounter < amount) {
         this.slowCounter = amount;
       }
@@ -299,7 +364,7 @@ export class Enemy implements EnemyState {
       this.fireCounter += Math.trunc(amount / 4);
     }
     let damage = amount;
-    if (shot !== ShotType.UraniumBullet) {
+    if (shot !== ShotType.UraniumBullet && shot !== ShotType.Rail) {
       damage -= this.props.armor;
     }
     this.health = Math.max(0, this.health - Math.max(1, damage));
@@ -343,6 +408,8 @@ export class Tower {
   targetMode: TargetMode | null = null;
   /** Inside a Command Tower's aura (longer range). */
   boosted = false;
+  /** Tick an Arc Crawler's jam wears off. */
+  jammedUntil = 0;
 
   constructor(
     readonly gridX: number,
@@ -380,8 +447,20 @@ export class Tower {
     this.lastDirection = 270;
   }
 
+  /** Stops the tower firing for a while. Returns false if it has no weapon or is still immune. */
+  jam(tick: number): boolean {
+    if (this.props.shotType === ShotType.None || tick < this.jammedUntil + JAM_IMMUNE_TICKS) {
+      return false;
+    }
+    this.jammedUntil = tick + JAM_TICKS;
+    return true;
+  }
+
   /** Runs one tick. Returns a new projectile when the tower fires one. */
   update(world: World, targets: readonly Enemy[]): Bullet | null {
+    if (world.tick < this.jammedUntil) {
+      return null;
+    }
     const p = this.props;
     this.shotDelay--;
     if (this.shotDelay > 0) {
@@ -412,6 +491,11 @@ export class Tower {
       }
       return null;
     }
+    if (p.shotType === ShotType.Rail) {
+      this.shotDelay = p.shotDelay;
+      this.fireRail(world, target);
+      return null;
+    }
 
     this.shotDelay = p.shotDelay;
     const x = this.gridX * GRID + GRID_HALF;
@@ -421,6 +505,41 @@ export class Tower {
     v.y = Math.trunc((v.y * 3) / 4);
     world.shotFired(p.shotType);
     return new Bullet(x + v.x, y + v.y, target, p.shotType, p.power);
+  }
+
+  /**
+   * Fires a slug at `target` that carries on to the end of the tower's range, hitting every robot
+   * along the way. It works on drawn positions, so what the streak crosses is what it hits.
+   */
+  private fireRail(world: World, target: Enemy): void {
+    const p = this.props;
+    const x = this.gridX * GRID + GRID_HALF;
+    const y = this.gridY * GRID + GRID_HALF - (p.towerHeight + 7);
+    const dx = target.drawnCenterX - x;
+    const dy = target.drawnCenterY - y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const ux = dx / distance;
+    const uy = dy / distance;
+    const reach = Math.max(this.attackRadius, distance);
+    for (const e of world.enemies) {
+      if (e.finished) {
+        continue;
+      }
+      const ex = e.drawnCenterX - x;
+      const ey = e.drawnCenterY - y;
+      const along = ex * ux + ey * uy;
+      if (along >= 0 && along <= reach && Math.abs(ex * uy - ey * ux) <= RAIL_HALF_WIDTH) {
+        e.applyDamage(p.power, ShotType.Rail);
+      }
+    }
+    world.addRailBeam({
+      tick: world.tick,
+      x: x + ux * p.gunRadius,
+      y: y + (uy * p.gunRadius * 3) / 4,
+      endX: x + ux * reach,
+      endY: y + uy * reach,
+    });
+    world.shotFired(ShotType.Rail);
   }
 
   /** Turret angle (degrees), tracking the current target. */

@@ -210,6 +210,7 @@ export function UpgradePanel({ controller }: { controller: GameController }) {
   const table = state.towerTable;
   const props = table.get(tower.type);
   const upgrades = props.upgrades.filter((u): u is TowerType => u >= 0);
+  const peers = state.towers.filter((t) => t.type === tower.type).length;
   const isCommand = tower.type === TowerType.Command;
   // Only towers that actually shoot have a choice of target.
   const canTarget = state.commandActive && !isCommand && hasFireRate(props);
@@ -277,6 +278,17 @@ export function UpgradePanel({ controller }: { controller: GameController }) {
                     onPress={() => controller.upgradeSelected(u)}
                   />
                 ))}
+                {peers > 1 &&
+                  upgrades.map((u) => (
+                    <GlassButton
+                      key={u}
+                      label={`All ${peers} → ${table.get(u).label} · $${table.get(u).cost * peers}`}
+                      size="sm"
+                      disabled={money < table.get(u).cost * peers}
+                      style={styles.allButton}
+                      onPress={() => controller.upgradeAllLikeSelected(u)}
+                    />
+                  ))}
               </View>
             ) : (
               <View style={styles.maxed}>
@@ -341,6 +353,9 @@ const styles = StyleSheet.create({
   option: {
     flexGrow: 1,
     flexBasis: '45%',
+  },
+  allButton: {
+    flexBasis: '100%',
   },
   optionSurface: {
     // Fill the row's height so side-by-side options match when one label wraps.

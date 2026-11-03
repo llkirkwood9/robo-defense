@@ -19,9 +19,11 @@ export enum EnemyType {
   Titan = 9,
   /** The mothership, which drops soldiers as it flies. */
   Dropper = 10,
+  /** A crab carrying a coil whose pulses jam nearby towers. */
+  ArcCrawler = 11,
 }
 
-export const ENEMY_TYPE_COUNT = 11;
+export const ENEMY_TYPE_COUNT = 12;
 
 export interface EnemyProps {
   name: string;
@@ -38,11 +40,15 @@ export interface EnemyProps {
   /** Unit type dropped while flying, or -1. */
   dropType: EnemyType | -1;
   dropDelay: number;
+  /** Ticks between pulses that jam nearby towers, or 0 for robots without a coil. */
+  jamDelay: number;
   /** First level (wave number) this enemy can appear in. */
   firstLevel: number;
   minDifficulty: number;
   /** Animation advances every `frameSkip + 1` ticks. */
   frameSkip: number;
+  /** The sheet is one animation shared by every direction, for robots that look the same all round. */
+  singleFacing: boolean;
   /** Offset of the health bar from the sprite's left edge. */
   energyBarOffset: number;
   // Derived sprite geometry, in world pixels.
@@ -71,7 +77,9 @@ interface EnemyDef {
   minDifficulty?: number;
   dropType?: EnemyType;
   dropDelay?: number;
+  jamDelay?: number;
   frameSkip?: number;
+  singleFacing?: boolean;
   energyBarOffset: number;
   /** [centreX, centreY, visibleWidth, visibleHeight] as ratios of the frame size. */
   shape?: [number, number, number, number];
@@ -121,8 +129,8 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     health: 30,
     armor: 2,
     isFlyer: false,
-    speed: 35,
-    value: 3,
+    speed: 28,
+    value: 4,
     firstLevel: 25,
     energyBarOffset: 3,
   },
@@ -217,8 +225,22 @@ const DEFS: Record<EnemyType, EnemyDef> = {
     minDifficulty: 10,
     dropType: EnemyType.Soldier,
     dropDelay: 100,
+    singleFacing: true,
     energyBarOffset: 19,
     shape: [0.5, 0.26, 1.0, 0.5],
+  },
+  [EnemyType.ArcCrawler]: {
+    name: 'Arc Crawler',
+    label: 'ARCC',
+    sprite: 'arc_crawler',
+    health: 45,
+    armor: 3,
+    isFlyer: false,
+    speed: 13,
+    value: 6,
+    firstLevel: 12,
+    jamDelay: 120,
+    energyBarOffset: 3,
   },
 };
 
@@ -238,13 +260,15 @@ function build(def: EnemyDef): EnemyProps {
     value: def.value,
     dropType: def.dropType ?? -1,
     dropDelay: def.dropDelay ?? 0,
+    jamDelay: def.jamDelay ?? 0,
     firstLevel: def.firstLevel,
     minDifficulty: def.minDifficulty ?? 0,
     frameSkip: def.frameSkip ?? 0,
+    singleFacing: def.singleFacing ?? false,
     energyBarOffset: def.energyBarOffset,
     frameWidth: w,
     frameHeight: h,
-    framesPerDirection: Math.trunc(sheet.frames / 4),
+    framesPerDirection: def.singleFacing ? sheet.frames : Math.trunc(sheet.frames / 4),
     drawShiftX: Math.trunc((GRID - w) / 2),
     drawShiftY: GRID - h,
     centerX: Math.trunc(cx * w),
@@ -258,9 +282,24 @@ export const ENEMIES: readonly EnemyProps[] = Array.from({ length: ENEMY_TYPE_CO
   build(DEFS[i as EnemyType]),
 );
 
-/** Hit points for an enemy at a given wave and difficulty. */
+/** Waves over which a difficulty's extra hit points phase in. */
+const DIFFICULTY_RAMP_WAVES = 40;
+
+/**
+ * Hit points for an enemy at a given wave and difficulty. Difficulty phases in over the first waves
+ * (the wave budget stays the same, so early waves are more, weaker robots) because kill money can't
+ * pay for towers fast enough against full-strength robots from wave 1.
+ */
 export function enemyBaseHealth(type: EnemyType, level: number, difficulty: number): number {
-  return Math.trunc((ENEMIES[type].health * (difficulty * 8 + 9 + level)) / 10);
+  const ramp = Math.min(1, (level + DIFFICULTY_RAMP_WAVES / 2) / (DIFFICULTY_RAMP_WAVES * 1.5));
+  return Math.trunc((ENEMIES[type].health * (Math.trunc(difficulty * 8 * ramp) + 9 + level)) / 10);
+}
+
+/** Total hit points of the first wave, which scales every later wave's budget. */
+export function firstWaveHealth(difficulty: number): number {
+  return Math.trunc(
+    (Math.trunc((ENEMIES[EnemyType.Soldier].health * (difficulty * 8 + 10)) / 10) * 5) / 4,
+  );
 }
 
 /** Ticks a dying enemy keeps fading out. */
@@ -280,8 +319,8 @@ export function enemyFrame(type: EnemyType, orientation: number, frame: number):
   if (p.framesPerDirection === 0) {
     return 0;
   }
+  const facing = p.singleFacing ? 0 : orientation - 1;
   return (
-    (orientation - 1) * p.framesPerDirection +
-    (Math.trunc(frame / (p.frameSkip + 1)) % p.framesPerDirection)
+    facing * p.framesPerDirection + (Math.trunc(frame / (p.frameSkip + 1)) % p.framesPerDirection)
   );
 }

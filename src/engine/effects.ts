@@ -4,7 +4,6 @@
  * The original stored these as pooled `GameEvent`s with integer var slots; here they are plain
  * typed records that the renderer draws and the simulation prunes when they expire.
  */
-import type { EnemyType } from './enemies';
 import type { SpriteId } from './data/sprites';
 import { SPRITES } from './data/sprites';
 import { fastRandomInt } from './random';
@@ -47,9 +46,30 @@ export interface Explosion {
 }
 
 /** "$N" text that floats up from a destroyed enemy. */
+/** The streak left by a rail slug, in world pixels. */
+export interface RailBeam {
+  tick: number;
+  x: number;
+  y: number;
+  endX: number;
+  endY: number;
+}
+
+export const RAIL_BEAM_TICKS = 10;
+
+/** An expanding ring showing an Arc Crawler's pulse. */
+export interface JamPulse {
+  tick: number;
+  x: number;
+  y: number;
+}
+
+export const JAM_PULSE_TICKS = 15;
+
 export interface KillPopup {
   tick: number;
-  enemyType: EnemyType;
+  /** Cash the kill paid. */
+  value: number;
   x: number;
   y: number;
 }

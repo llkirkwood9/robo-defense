@@ -19,8 +19,6 @@ export interface Options {
   haptics: boolean;
   /** Leave fast-forward when a wave is cleared. */
   ffStopsBetweenLevels: boolean;
-  /** Pause when a life is lost during fast-forward. */
-  ffPausesOnLifeLoss: boolean;
   /** Keep the screen awake while playing. */
   keepAwake: boolean;
   /** Show tower range while placing or upgrading. */
@@ -31,7 +29,6 @@ const DEFAULT_OPTIONS: Options = {
   sound: true,
   haptics: true,
   ffStopsBetweenLevels: true,
-  ffPausesOnLifeLoss: true,
   keepAwake: true,
   showRange: true,
 };

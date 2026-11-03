@@ -5,19 +5,20 @@
  * paints the map, units, towers, projectiles and effects.
  */
 import type { SkCanvas, SkFont, SkImage, SkPaint } from '@shopify/react-native-skia';
-import { BlendMode, PaintStyle, Skia } from '@shopify/react-native-skia';
+import { BlendMode, FilterMode, MipmapMode, PaintStyle, Skia } from '@shopify/react-native-skia';
 
-import { GRID, GRID_HALF, SUB_SHIFT } from '@/engine/constants';
-import { PROJECTILES } from '@/engine/data/projectiles';
+import { GRID, GRID_HALF, JAM_RADIUS, SUB_SHIFT } from '@/engine/constants';
+import { PROJECTILES, ShotType } from '@/engine/data/projectiles';
 import type { SpriteId } from '@/engine/data/sprites';
-import { SPRITES } from '@/engine/data/sprites';
-import { EXPLOSION_SPRITES } from '@/engine/effects';
+import { frameRect, SPRITES } from '@/engine/data/sprites';
+import { EXPLOSION_SPRITES, JAM_PULSE_TICKS, RAIL_BEAM_TICKS } from '@/engine/effects';
 import { ENEMIES, enemyDeathFrames, enemyFrame } from '@/engine/enemies';
 import type { Enemy, Tower } from '@/engine/entities';
 import type { GameState } from '@/engine/gameState';
-import type { TowerType } from '@/engine/towers';
+import { TowerType } from '@/engine/towers';
 
 import type { Camera } from './camera';
+import { Ambience, jitter } from './ambience';
 import { argb, rgba } from './colors';
 import type { GameImages } from './images';
 import type { ScreenRect } from './starfield';
@@ -51,8 +52,32 @@ const RANGE_FILL = rgba(80, 220, 255, 0.12);
 const RANGE_STROKE = rgba(120, 230, 255, 0.55);
 const HEALTH_BACK = rgba(0, 0, 0, 0.55);
 const HEALTH_FILL = rgba(255, 48, 48);
+const ELITE_GLOW = rgba(255, 200, 60);
 const MONEY_COLOR = rgba(255, 230, 0);
 const SHADOW = rgba(0, 0, 0);
+const JAM_COLOR = rgba(120, 230, 255);
+/** Sparks crawling over a jammed tower. */
+const JAM_ARCS = 3;
+const JAM_ARC_SEGMENTS = 3;
+const JAM_ARC_STEP = 9;
+const RAIL_COLOR = rgba(205, 120, 255);
+const RAIL_CORE = rgba(255, 240, 255);
+const RAIL_FILL = rgba(225, 95, 255);
+const RAIL_DARK = rgba(28, 12, 48);
+/**
+ * Where the channel between a rail turret's rails sits in its sprite frame (see `rail_turret` and
+ * `turret_frames` in tools/sprites/towers.py, drawn by a 55 degree camera): the turret's origin
+ * row, and how far along the barrel the open stretches between its clamps run, breech first.
+ */
+const RAIL_ORIGIN_Y = 35.3;
+const RAIL_SECTIONS = [
+  [6, 13.5],
+  [16.5, 24],
+  [27, 33.8],
+] as const;
+const RAIL_CHARGE_LENGTH = RAIL_SECTIONS.reduce((sum, [from, to]) => sum + to - from, 0);
+/** Barrel lengths lying along the map are foreshortened by the camera. */
+const RAIL_Y_SCALE = 0.82;
 
 /** Turret direction shown on placement previews (pointing down-screen). */
 const PREVIEW_ANGLE = 270;
@@ -67,20 +92,35 @@ export class WorldRenderer {
   private readonly firePaint: SkPaint;
   private readonly fireSlowPaint: SkPaint;
   private readonly fadePaint: SkPaint = Skia.Paint();
+  private readonly addPaint: SkPaint = Skia.Paint();
   private readonly strokePaint: SkPaint = Skia.Paint();
+  private readonly jamPaint: SkPaint;
+  private readonly arcPaint: SkPaint = Skia.Paint();
+  private readonly beamPaint: SkPaint = Skia.Paint();
   private font: SkFont | null = null;
   private readonly starfield = new Starfield();
+  private readonly ambience = new Ambience();
   /** World-space bounds of the screen for the frame being drawn; sprites outside are skipped. */
   private viewLeft = 0;
   private viewTop = 0;
   private viewRight = 0;
   private viewBottom = 0;
+  /** Game tick of the frame being drawn. */
+  private renderTick = 0;
 
   constructor() {
     // Status tints use the same multiply colours as the original.
     this.slowPaint = this.tintPaint(-4128800);
     this.firePaint = this.tintPaint(-128);
     this.fireSlowPaint = this.tintPaint(-4128896);
+    this.jamPaint = this.tintPaint(-8349441);
+    this.addPaint.setBlendMode(BlendMode.Plus);
+    this.arcPaint.setStyle(PaintStyle.Stroke);
+    this.arcPaint.setStrokeWidth(1.6);
+    this.arcPaint.setAntiAlias(true);
+    this.arcPaint.setColor(JAM_COLOR);
+    this.beamPaint.setStyle(PaintStyle.Stroke);
+    this.beamPaint.setAntiAlias(true);
     this.strokePaint.setStyle(PaintStyle.Stroke);
     this.strokePaint.setStrokeWidth(3);
     this.strokePaint.setAntiAlias(true);
@@ -104,54 +144,60 @@ export class WorldRenderer {
     this.viewTop = camera.toWorldY(0);
     this.viewRight = camera.toWorldX(sw);
     this.viewBottom = camera.toWorldY(sh);
+    this.renderTick = tick;
 
-    // Space backdrop with stars around the map edges.
-    this.paint.setColor(BACKDROP);
-    canvas.drawRect(Skia.XYWHRect(0, 0, sw, sh), this.paint);
-    const mapLeft = camera.toScreenX(0);
-    const mapTop = camera.toScreenY(0);
-    const mapRight = camera.toScreenX(mapW);
-    const mapBottom = camera.toScreenY(mapH);
-    const margins: ScreenRect[] = [
-      { left: 0, top: 0, right: mapLeft, bottom: sh },
-      { left: mapRight, top: 0, right: sw, bottom: sh },
-      { left: 0, top: 0, right: sw, bottom: mapTop },
-      { left: 0, top: mapBottom, right: sw, bottom: sh },
-    ];
-    this.starfield.draw(canvas, margins, sw, sh, tick);
+    if (layout.backdrop === 'clouds') {
+      this.ambience.drawClouds(canvas, camera, images.sprites, tick);
+    } else {
+      // Space backdrop with stars around the map edges, and under it when it is see-through.
+      this.paint.setColor(BACKDROP);
+      canvas.drawRect(Skia.XYWHRect(0, 0, sw, sh), this.paint);
+      const mapLeft = camera.toScreenX(0);
+      const mapTop = camera.toScreenY(0);
+      const mapRight = camera.toScreenX(mapW);
+      const mapBottom = camera.toScreenY(mapH);
+      const margins: ScreenRect[] = layout.seeThrough
+        ? [{ left: 0, top: 0, right: sw, bottom: sh }]
+        : [
+            { left: 0, top: 0, right: mapLeft, bottom: sh },
+            { left: mapRight, top: 0, right: sw, bottom: sh },
+            { left: 0, top: 0, right: sw, bottom: mapTop },
+            { left: 0, top: mapBottom, right: sw, bottom: sh },
+          ];
+      this.starfield.draw(canvas, margins, sw, sh, tick);
+    }
 
     canvas.save();
     canvas.translate(camera.offsetX, camera.offsetY);
     canvas.scale(camera.scale, camera.scale);
 
-    // Map background (authored at the simulation's grid size, so drawn 1:1).
+    // Map background (rendered at a higher resolution than the world, so scaled to fit it).
     const bg = images.level;
-    canvas.drawImageRect(
+    canvas.drawImageRectOptions(
       bg,
       Skia.XYWHRect(0, 0, bg.width(), bg.height()),
-      Skia.XYWHRect(0, 0, bg.width(), bg.height()),
+      Skia.XYWHRect(0, 0, mapW, mapH),
+      FilterMode.Linear,
+      MipmapMode.None,
       this.spritePaint,
     );
-    canvas.restore();
-
-    // Roadway: stars show through the open sky.
-    if (layout.starfield.length > 0) {
-      const skies = layout.starfield.map((r) => ({
-        left: camera.toScreenX(r.left),
-        top: camera.toScreenY(r.top),
-        right: camera.toScreenX(r.right),
-        bottom: camera.toScreenY(r.bottom),
-      }));
-      this.starfield.draw(canvas, skies, sw, sh, tick);
-    }
-
-    canvas.save();
-    canvas.translate(camera.offsetX, camera.offsetY);
-    canvas.scale(camera.scale, camera.scale);
 
     for (const d of layout.underlays) {
-      this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
+      if (d.frameTicks) {
+        this.drawCrossfaded(canvas, images, d.sprite, tick / d.frameTicks, d.x, d.y);
+      } else {
+        this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
+      }
     }
+    this.ambience.drawLights(
+      canvas,
+      layout.lights,
+      tick,
+      this.viewLeft,
+      this.viewTop,
+      this.viewRight,
+      this.viewBottom,
+    );
     for (const t of state.towers) {
       const sprite = t.props.sprite;
       if (sprite) {
@@ -173,9 +219,14 @@ export class WorldRenderer {
       this.drawSprite(canvas, images.sprites, d.sprite, 0, d.x, d.y, this.spritePaint);
     }
 
+    if (layout.dust) {
+      this.ambience.drawDust(canvas, images.sprites, tick, mapW, mapH);
+    }
     this.drawParticles(canvas, state);
+    this.drawJamEffects(canvas, state);
     this.drawExplosions(canvas, state, images);
     this.drawBullets(canvas, state, images);
+    this.drawRailBeams(canvas, state);
     this.drawKillPopups(canvas, state, images);
     this.drawSelection(canvas, input);
 
@@ -201,12 +252,49 @@ export class WorldRenderer {
     ) {
       return;
     }
-    canvas.drawImageRect(
+    const src = frameRect(sheet, frame);
+    // Filtered, or zooming in shows blocky pixels (a plain drawImageRect is nearest-neighbour).
+    canvas.drawImageRectOptions(
       sprites[id],
-      Skia.XYWHRect(frame * sheet.frameWidth, 0, sheet.frameWidth, sheet.frameHeight),
+      Skia.XYWHRect(src.x, src.y, src.width, src.height),
       Skia.XYWHRect(x, y, sheet.frameWidth, sheet.frameHeight),
+      FilterMode.Linear,
+      MipmapMode.None,
       paint,
     );
+  }
+
+  /**
+   * Draws a looping animation at a fractional frame, blending the two frames either side of it.
+   * They are summed in a layer: simply fading one over the other would make anything solid turn
+   * see-through halfway between frames, which shows as a flicker.
+   */
+  private drawCrossfaded(
+    canvas: SkCanvas,
+    images: GameImages,
+    id: SpriteId,
+    position: number,
+    x: number,
+    y: number,
+  ): void {
+    const { frames } = SPRITES[id];
+    const { frameWidth, frameHeight } = SPRITES[id];
+    if (
+      x > this.viewRight ||
+      y > this.viewBottom ||
+      x + frameWidth < this.viewLeft ||
+      y + frameHeight < this.viewTop
+    ) {
+      return;
+    }
+    const frame = Math.floor(position);
+    const mix = position - frame;
+    canvas.saveLayer(undefined, Skia.XYWHRect(x, y, frameWidth, frameHeight));
+    this.fadePaint.setAlphaf(1 - mix);
+    this.drawSprite(canvas, images.sprites, id, frame % frames, x, y, this.fadePaint);
+    this.addPaint.setAlphaf(mix);
+    this.drawSprite(canvas, images.sprites, id, (frame + 1) % frames, x, y, this.addPaint);
+    canvas.restore();
   }
 
   /** Towers' turrets and enemies, sorted so lower objects overlap higher ones. */
@@ -241,7 +329,81 @@ export class WorldRenderer {
     if (frame >= 0) {
       const x = t.gridX * GRID;
       const y = t.gridY * GRID - p.towerHeight;
-      this.drawSprite(canvas, input.images.sprites, p.sprite, frame, x, y, this.spritePaint);
+      const jammed = input.state.tick < t.jammedUntil;
+      this.drawSprite(
+        canvas,
+        input.images.sprites,
+        p.sprite,
+        frame,
+        x,
+        y,
+        jammed ? this.jamPaint : this.spritePaint,
+      );
+      if (p.shotType === ShotType.Rail && !jammed) {
+        this.drawRailCharge(canvas, t, frame, x, y);
+      }
+    }
+  }
+
+  /**
+   * Lights the channel between a rail turret's rails from breech to muzzle as the slug charges, and
+   * keeps it pulsing while the slug waits for a target. Stops at each clamp, so they stay in front.
+   */
+  private drawRailCharge(canvas: SkCanvas, t: Tower, frame: number, x: number, y: number): void {
+    if (
+      x > this.viewRight ||
+      y > this.viewBottom ||
+      x + GRID < this.viewLeft ||
+      y + GRID < this.viewTop
+    ) {
+      return;
+    }
+    const p = t.props;
+    const charge = 1 - Math.min(1, Math.max(0, t.shotDelay / p.shotDelay));
+    const heading = ((frame - 1) * 2 * Math.PI) / p.directions;
+    const ux = Math.sin(heading);
+    const uy = -Math.cos(heading) * RAIL_Y_SCALE;
+    const originX = x + GRID_HALF;
+    const originY = y + RAIL_ORIGIN_Y;
+    const width = t.type === TowerType.Rail2 ? 4.5 : 3.5;
+    let lit = charge * RAIL_CHARGE_LENGTH;
+    for (const [from, to] of RAIL_SECTIONS) {
+      const x0 = originX + ux * from;
+      const y0 = originY + uy * from;
+      // The empty channel goes dark, or the sprite's own glow would read as already charged.
+      this.beamPaint.setColor(RAIL_DARK);
+      this.beamPaint.setAlphaf(0.9);
+      this.beamPaint.setStrokeWidth(width + 1);
+      canvas.drawLine(x0, y0, originX + ux * to, originY + uy * to, this.beamPaint);
+      if (lit > 0) {
+        const end = Math.min(to, from + lit);
+        const x1 = originX + ux * end;
+        const y1 = originY + uy * end;
+        this.beamPaint.setColor(RAIL_COLOR);
+        this.beamPaint.setAlphaf(0.6);
+        this.beamPaint.setStrokeWidth(width + 5);
+        canvas.drawLine(x0, y0, x1, y1, this.beamPaint);
+        this.beamPaint.setColor(RAIL_FILL);
+        this.beamPaint.setAlphaf(1);
+        this.beamPaint.setStrokeWidth(width);
+        canvas.drawLine(x0, y0, x1, y1, this.beamPaint);
+        this.beamPaint.setColor(RAIL_CORE);
+        this.beamPaint.setStrokeWidth(width * 0.4);
+        canvas.drawLine(x0, y0, x1, y1, this.beamPaint);
+        lit -= to - from;
+      }
+    }
+    if (charge >= 1) {
+      const muzzle = RAIL_SECTIONS[RAIL_SECTIONS.length - 1][1];
+      const mx = originX + ux * muzzle;
+      const my = originY + uy * muzzle;
+      const pulse = Math.sin(t.gridX + t.gridY + this.renderTick * 0.25);
+      this.paint.setColor(RAIL_COLOR);
+      this.paint.setAlphaf(0.4 + 0.15 * pulse);
+      canvas.drawCircle(mx, my, 4 + 0.75 * pulse, this.paint);
+      this.paint.setColor(RAIL_CORE);
+      this.paint.setAlphaf(1);
+      canvas.drawCircle(mx, my, 2, this.paint);
     }
   }
 
@@ -258,6 +420,21 @@ export class WorldRenderer {
       const frame = enemyFrame(e.type, e.orientation, e.firstState + e.deathTick);
       this.drawSprite(canvas, images.sprites, p.sprite, frame, left, top, this.fadePaint);
       return;
+    }
+
+    if (e.elite) {
+      // A pulsing golden ring around the robot.
+      const pulse = Math.sin(tick * 0.2);
+      const cx = left + p.centerX;
+      const cy = top + p.centerY;
+      const r = Math.max(p.visibleWidth, p.visibleHeight) * (0.55 + 0.03 * pulse);
+      this.paint.setColor(ELITE_GLOW);
+      this.paint.setAlphaf(0.12);
+      canvas.drawCircle(cx, cy, r, this.paint);
+      this.paint.setAlphaf(1);
+      this.strokePaint.setColor(ELITE_GLOW);
+      this.strokePaint.setAlphaf(0.7 + 0.25 * pulse);
+      canvas.drawCircle(cx, cy, r, this.strokePaint);
     }
 
     let animFrame = e.firstState + tick;
@@ -287,7 +464,7 @@ export class WorldRenderer {
     const barY = top + 1;
     this.paint.setColor(HEALTH_BACK);
     canvas.drawRect(Skia.XYWHRect(barX - 1, barY - 1, barWidth + 2, 4), this.paint);
-    this.paint.setColor(HEALTH_FILL);
+    this.paint.setColor(e.elite ? ELITE_GLOW : HEALTH_FILL);
     canvas.drawRect(Skia.XYWHRect(barX, barY, (barWidth * e.health) / e.maxHealth, 2), this.paint);
   }
 
@@ -335,6 +512,58 @@ export class WorldRenderer {
     }
   }
 
+  /** Rail slug streaks: a wide glow around a bright core, both thinning as they fade. */
+  private drawRailBeams(canvas: SkCanvas, state: GameState): void {
+    for (const b of state.railBeams) {
+      const fade = 1 - (state.tick - b.tick) / RAIL_BEAM_TICKS;
+      this.beamPaint.setColor(RAIL_COLOR);
+      this.beamPaint.setAlphaf(0.45 * fade);
+      this.beamPaint.setStrokeWidth(12 * fade);
+      canvas.drawLine(b.x, b.y, b.endX, b.endY, this.beamPaint);
+      this.beamPaint.setColor(RAIL_CORE);
+      this.beamPaint.setAlphaf(fade);
+      this.beamPaint.setStrokeWidth(4 * fade);
+      canvas.drawLine(b.x, b.y, b.endX, b.endY, this.beamPaint);
+    }
+  }
+
+  /** Arc Crawler pulses and the sparks on the towers they jammed. */
+  private drawJamEffects(canvas: SkCanvas, state: GameState): void {
+    const { tick } = state;
+    for (const p of state.jamPulses) {
+      const age = (tick - p.tick) / JAM_PULSE_TICKS;
+      this.strokePaint.setColor(JAM_COLOR);
+      this.strokePaint.setAlphaf(1 - age);
+      canvas.drawCircle(p.x, p.y, JAM_RADIUS * (0.15 + 0.85 * age), this.strokePaint);
+      this.paint.setColor(JAM_COLOR);
+      this.paint.setAlphaf(0.18 * (1 - age));
+      canvas.drawCircle(p.x, p.y, JAM_RADIUS * (0.15 + 0.85 * age), this.paint);
+    }
+    this.paint.setAlphaf(1);
+    for (const t of state.towers) {
+      if (tick >= t.jammedUntil) {
+        continue;
+      }
+      const cx = t.gridX * GRID + GRID_HALF;
+      const cy = t.gridY * GRID + GRID_HALF - t.props.towerHeight;
+      // The bolts jump to a new shape every other tick.
+      const seed = (tick >> 1) * 31 + t.gridX * 7 + t.gridY * 13;
+      for (let arc = 0; arc < JAM_ARCS; arc++) {
+        let angle = jitter(seed + arc) * Math.PI * 2;
+        let x = cx;
+        let y = cy;
+        for (let s = 0; s < JAM_ARC_SEGMENTS; s++) {
+          angle += (jitter(seed + arc * 5 + s * 11) - 0.5) * 2;
+          const nx = x + Math.cos(angle) * JAM_ARC_STEP;
+          const ny = y + Math.sin(angle) * JAM_ARC_STEP;
+          canvas.drawLine(x, y, nx, ny, this.arcPaint);
+          x = nx;
+          y = ny;
+        }
+      }
+    }
+  }
+
   private drawExplosions(canvas: SkCanvas, state: GameState, images: GameImages): void {
     for (const ex of state.explosions) {
       const frame = state.tick - ex.firstTick;
@@ -375,8 +604,7 @@ export class WorldRenderer {
     const font = this.font;
     for (const k of state.killPopups) {
       const age = state.tick - k.tick;
-      const value = ENEMIES[k.enemyType].value;
-      const text = value > 100 ? '>$100' : `$${value}`;
+      const text = k.value > 100 ? '>$100' : `$${k.value}`;
       const x = k.x + 5;
       const y = k.y + GRID_HALF - age;
       this.paint.setColor(SHADOW);

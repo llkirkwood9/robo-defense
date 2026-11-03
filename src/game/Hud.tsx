@@ -23,6 +23,7 @@ const selectMoney = (h: HudState) => h.money;
 const selectHealth = (h: HudState) => h.health;
 const selectScore = (h: HudState) => h.score;
 const selectBonus = (h: HudState) => h.bonus;
+const selectCallWaveBonus = (h: HudState) => h.callWaveBonus;
 const selectScoreAdds = (f: FeedState) => f.scoreAdds;
 
 /**
@@ -99,6 +100,7 @@ export function Hud({ controller }: { controller: GameController }) {
   const money = useStore(controller.hud, selectMoney);
   const health = useStore(controller.hud, selectHealth);
   const bonus = useStore(controller.hud, selectBonus);
+  const callWaveBonus = useStore(controller.hud, selectCallWaveBonus);
 
   const active =
     runState === RunState.Running ||
@@ -145,6 +147,15 @@ export function Hud({ controller }: { controller: GameController }) {
           </Text>
           <Text variant="caption">· Lv {difficulty}</Text>
         </GlassSurface>
+        {callWaveBonus !== null && (
+          <GlassButton
+            label={`Next wave +$${callWaveBonus}`}
+            icon="bolt"
+            size="md"
+            accessibilityLabel={`Send the next wave now for $${callWaveBonus}`}
+            onPress={() => controller.callNextWave()}
+          />
+        )}
       </GlassGroup>
 
       <Animated.View layout={LinearTransition}>

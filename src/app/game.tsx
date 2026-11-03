@@ -104,7 +104,7 @@ export default function GameScreen() {
     }, [controller]),
   );
 
-  // Web keyboard shortcuts: Space pauses or resumes, F toggles fast-forward and Escape closes the
+  // Web keyboard shortcuts: Space pauses or resumes, F toggles fast-forward, N sends the next wave and Escape closes the
   // upgrade panel or toggles the pause menu.
   useFocusEffect(
     useCallback(() => {
@@ -120,6 +120,8 @@ export default function GameScreen() {
           controller.togglePause();
         } else if (e.key.toLowerCase() === 'f' && state.isRunning) {
           controller.toggleFastForward();
+        } else if (e.key.toLowerCase() === 'n' && state.callWaveBonus !== null) {
+          controller.callNextWave();
         } else if (e.key === 'Escape' && controller.hud.get().selected) {
           controller.closeUpgradePanel();
         } else if (e.key === 'Escape' && state.isActive) {
