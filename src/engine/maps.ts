@@ -171,18 +171,35 @@ const gateLamp = (x: number, y: number, entrance: boolean, radius = 18): MapLigh
   phase: x + y,
 });
 
-// World positions below match the art in tools/sprites/levels.py, lifted by the 3D view.
+/** Gate towers in the art: footprint and how far the 3D view lifts their tops, in world pixels. */
+interface GatePiers {
+  size: number;
+  lift: number;
+}
 
-const RUINS_LIGHTS: MapLight[] = [
-  gateLamp(21.5, 377.5, true),
-  gateLamp(21.5, 511.5, true),
-  gateLamp(678.5, 21.5, true),
-  gateLamp(791.5, 21.5, true),
-  gateLamp(1378.5, 377.5, false),
-  gateLamp(1378.5, 511.5, false),
-  gateLamp(678.5, 796.5, false),
-  gateLamp(791.5, 796.5, false),
-];
+/**
+ * The lamps on the towers either side of a gate (wall-coded like the paths), matching where
+ * `gate_piers` in tools/sprites/levels.py puts their bowls.
+ */
+function gateLamps(code: number, entrance: boolean, def: StaticMap, piers: GatePiers): MapLight[] {
+  const wall = code >> 8;
+  const offset = code & 255;
+  const half = piers.size / 2;
+  if (wall === 1 || wall === 3) {
+    const x = wall === 3 ? half : def.width * GRID - half;
+    return [
+      gateLamp(x, offset * GRID - half - piers.lift, entrance),
+      gateLamp(x, (offset + 1) * GRID + half, entrance),
+    ];
+  }
+  const y = wall === 2 ? half : def.height * GRID - 1 - half - piers.lift;
+  return [
+    gateLamp(offset * GRID - half, y, entrance),
+    gateLamp((offset + 1) * GRID + half, y, entrance),
+  ];
+}
+
+// World positions below match the art in tools/sprites/levels.py, lifted by the 3D view.
 
 /** Crystals on the battlements. */
 const SKY_CRYSTALS = [
@@ -314,6 +331,7 @@ interface StaticMap {
   seeThrough?: boolean;
   lights?: MapLight[];
   dust?: boolean;
+  gatePiers?: GatePiers;
 }
 
 const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
@@ -338,7 +356,7 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     ends: [262, 1034],
     image: 'cross_level',
     scoreMultiplier: 125,
-    lights: RUINS_LIGHTS,
+    gatePiers: { size: 43, lift: 21 },
     dust: true,
   },
   [MapType.Factory]: {
@@ -348,6 +366,7 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
     ends: [259, 262, 265],
     image: 'threeway_level',
     scoreMultiplier: 140,
+    gatePiers: { size: 36, lift: 19 },
   },
   [MapType.Courtyard]: {
     width: 20,
@@ -362,15 +381,7 @@ const STATIC_MAPS: Record<Exclude<MapType, MapType.VrTraining>, StaticMap> = {
       { sprite: 'fountain', x: 630, y: 330 },
       { sprite: 'fountain_water', x: 630, y: 330, frameTicks: FOUNTAIN_FRAME_TICKS },
     ],
-    // Archway lintels; the south ones reach 20px above their footprint (lifted by the 3D view).
-    overlays: [
-      { sprite: 'courtyard_nw_overlay', x: GRID * 4 - 6, y: 0 },
-      { sprite: 'courtyard_n_overlay', x: GRID * 10 - 6, y: 0 },
-      { sprite: 'courtyard_ne_overlay', x: GRID * 15 - 6, y: 0 },
-      { sprite: 'courtyard_sw_overlay', x: GRID * 4 - 6, y: GRID * 11 - 20 },
-      { sprite: 'courtyard_s_overlay', x: GRID * 10 - 6, y: GRID * 11 - 20 },
-      { sprite: 'courtyard_se_overlay', x: GRID * 15 - 6, y: GRID * 11 - 20 },
-    ],
+    gatePiers: { size: 36, lift: 16.5 },
   },
   [MapType.Roadway]: {
     width: 9,
@@ -422,7 +433,15 @@ export function createMapLayout(type: MapType, mixerCode = 0): MapLayout {
     overlays: def.overlays ?? [],
     backdrop: def.backdrop ?? 'stars',
     seeThrough: def.seeThrough ?? false,
-    lights: def.lights ?? [],
+    lights: [
+      ...(def.lights ?? []),
+      ...(def.gatePiers
+        ? [
+            ...def.starts.flatMap((c) => gateLamps(c, true, def, def.gatePiers!)),
+            ...def.ends.flatMap((c) => gateLamps(c, false, def, def.gatePiers!)),
+          ]
+        : []),
+    ],
     dust: def.dust ?? false,
     scoreMultiplier: def.scoreMultiplier,
   };

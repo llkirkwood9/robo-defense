@@ -92,6 +92,7 @@ export class WorldRenderer {
   private readonly firePaint: SkPaint;
   private readonly fireSlowPaint: SkPaint;
   private readonly fadePaint: SkPaint = Skia.Paint();
+  private readonly addPaint: SkPaint = Skia.Paint();
   private readonly strokePaint: SkPaint = Skia.Paint();
   private readonly jamPaint: SkPaint;
   private readonly arcPaint: SkPaint = Skia.Paint();
@@ -113,6 +114,7 @@ export class WorldRenderer {
     this.firePaint = this.tintPaint(-128);
     this.fireSlowPaint = this.tintPaint(-4128896);
     this.jamPaint = this.tintPaint(-8349441);
+    this.addPaint.setBlendMode(BlendMode.Plus);
     this.arcPaint.setStyle(PaintStyle.Stroke);
     this.arcPaint.setStrokeWidth(1.6);
     this.arcPaint.setAntiAlias(true);
@@ -257,7 +259,11 @@ export class WorldRenderer {
     );
   }
 
-  /** Draws a looping animation at a fractional frame, blending the two frames either side of it. */
+  /**
+   * Draws a looping animation at a fractional frame, blending the two frames either side of it.
+   * They are summed in a layer: simply fading one over the other would make anything solid turn
+   * see-through halfway between frames, which shows as a flicker.
+   */
   private drawCrossfaded(
     canvas: SkCanvas,
     images: GameImages,
@@ -267,12 +273,23 @@ export class WorldRenderer {
     y: number,
   ): void {
     const { frames } = SPRITES[id];
+    const { frameWidth, frameHeight } = SPRITES[id];
+    if (
+      x > this.viewRight ||
+      y > this.viewBottom ||
+      x + frameWidth < this.viewLeft ||
+      y + frameHeight < this.viewTop
+    ) {
+      return;
+    }
     const frame = Math.floor(position);
     const mix = position - frame;
+    canvas.saveLayer(undefined, Skia.XYWHRect(x, y, frameWidth, frameHeight));
     this.fadePaint.setAlphaf(1 - mix);
     this.drawSprite(canvas, images.sprites, id, frame % frames, x, y, this.fadePaint);
-    this.fadePaint.setAlphaf(mix);
-    this.drawSprite(canvas, images.sprites, id, (frame + 1) % frames, x, y, this.fadePaint);
+    this.addPaint.setAlphaf(mix);
+    this.drawSprite(canvas, images.sprites, id, (frame + 1) % frames, x, y, this.addPaint);
+    canvas.restore();
   }
 
   /** Towers' turrets and enemies, sorted so lower objects overlap higher ones. */

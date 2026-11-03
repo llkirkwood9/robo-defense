@@ -17,12 +17,6 @@ export const SPRITE_SOURCES: Record<SpriteId, number> = {
   clouds_far: require('@/assets/sprites/clouds_far.png'),
   clouds_near: require('@/assets/sprites/clouds_near.png'),
   command_tower: require('@/assets/sprites/command_tower.png'),
-  courtyard_n_overlay: require('@/assets/sprites/courtyard_n_overlay.png'),
-  courtyard_ne_overlay: require('@/assets/sprites/courtyard_ne_overlay.png'),
-  courtyard_nw_overlay: require('@/assets/sprites/courtyard_nw_overlay.png'),
-  courtyard_s_overlay: require('@/assets/sprites/courtyard_s_overlay.png'),
-  courtyard_se_overlay: require('@/assets/sprites/courtyard_se_overlay.png'),
-  courtyard_sw_overlay: require('@/assets/sprites/courtyard_sw_overlay.png'),
   dust_puff: require('@/assets/sprites/dust_puff.png'),
   explosion: require('@/assets/sprites/explosion.png'),
   fire: require('@/assets/sprites/fire.png'),
@@ -92,6 +86,17 @@ export const LEVEL_SOURCES: Record<LevelImageId, number> = {
   roadway_level: require('@/assets/levels/roadway_level.webp'),
   skytower_level: require('@/assets/levels/skytower_level.webp'),
   threeway_level: require('@/assets/levels/threeway_level.jpg'),
+};
+
+/** Map picker thumbnails with everything drawn on the map (rendered by tools/sprites/previews.py). */
+export const LEVEL_PREVIEWS: Record<LevelImageId, number> = {
+  basic_level: require('@/assets/levels/previews/basic_level.jpg'),
+  courtyard_level: require('@/assets/levels/previews/courtyard_level.jpg'),
+  cross_level: require('@/assets/levels/previews/cross_level.jpg'),
+  mixer_level: require('@/assets/levels/previews/mixer_level.jpg'),
+  roadway_level: require('@/assets/levels/previews/roadway_level.jpg'),
+  skytower_level: require('@/assets/levels/previews/skytower_level.jpg'),
+  threeway_level: require('@/assets/levels/previews/threeway_level.jpg'),
 };
 
 /** Robot portraits for the title screen (rendered by tools/sprites/titles.py). */

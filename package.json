@@ -57,6 +57,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "map-layouts": "tsc -p tools/previews/tsconfig.json && node node_modules/.cache/robo-previews/tools/previews/layouts.js",
     "balance": "tsc -p tools/balance/tsconfig.json && node node_modules/.cache/robo-balance/tools/balance/simulate.js"
   },
   "private": true

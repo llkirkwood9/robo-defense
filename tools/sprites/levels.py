@@ -1,6 +1,6 @@
 """
 Map backgrounds (assets/levels/*.jpg, or *.webp where the sky shows through) and map decoration
-sprites (VR Training blocks, Courtyard arches, lava, the fountain, clouds, dust), rendered from procedural height fields lit from the upper right.
+sprites (VR Training blocks, lava, the fountain, clouds, dust), rendered from procedural height fields lit from the upper right.
 
     python levels.py              # every map
     python levels.py basic_level  # one map
@@ -476,6 +476,37 @@ def gate_arrows(c, code, entrance, reach=0.9, opacity=0.8):
         c.paint(m, albedo=np.asarray(color) * 0.8, emit=np.asarray(color) * 0.3)
 
 
+def gate_piers(c, code, size, top, ground, stone, cap, bowl=(0.1, 0.09, 0.08)):
+    """A tower either side of a gate, placed so that once their tops are lifted by the oblique view
+    the opening still lines up with its row or column. Each has a bowl on top for the lamp the game
+    draws: `gateLamps` in maps.ts works out the same positions."""
+    wall, off = code >> 8, code & 255
+    lift = round((top - ground) * OBLIQUE)
+    if wall in (1, 3):
+        x0 = 0 if wall == 3 else c.w - size
+        rects = ((x0, off * T - size), (x0, (off + 1) * T + lift))
+    else:
+        y0 = lift if wall == 2 else c.h - 2 - size
+        rects = ((off * T - size, y0), ((off + 1) * T, y0))
+    for x, y in rects:
+        tower = c.rrect(x, y, x + size, y + size, 5, 2)
+        c.block(tower, top, 5, stone, 0.1)
+        c.paint(tower[0], emit=(0, 0, 0))     # covers any wall lights it stands in front of
+        c.block(c.rrect(x + 10, y + 10, x + size - 10, y + size - 10, 4, 2), top + 5, 3, cap, 0.1)
+        c.block(c.disc(x + size / 2, y + size / 2, size * 0.23, 2), top + 9, 3, bowl, 0.3)
+
+
+def gate_mouth(c, code, depth=T * 0.56, sill=(0.74, 0.66, 0.5)):
+    """Shadow falling away at the map edge in a gateway, behind a sill across the opening."""
+    wall, off = code >> 8, code & 255
+    dist = {1: c.w - c.x, 2: c.y, 3: c.x, 4: c.h - c.y}[wall]
+    along = np.abs((c.y if wall in (1, 3) else c.x) - (off + 0.5) * T)
+    mouth = smoothstep(T * 0.48, T * 0.45, along) * smoothstep(depth + 22, depth + 5, dist)
+    c.paint(mouth * smoothstep(depth - 20, T * 0.02, dist) * 0.92, albedo=(0.04, 0.03, 0.03))
+    line = smoothstep(T * 0.5, T * 0.47, along) * smoothstep(9, 6, np.abs(dist - depth))
+    c.paint(line, albedo=sill, height=c.ground + 4)
+
+
 RUINS_ENTRANCES = (774, 522)
 RUINS_EXITS = (262, 1034)
 RUINS_WALL = 48          # height of the curtain wall
@@ -563,34 +594,15 @@ def cross_level():
     # Gate towers either side of each opening, plus a bastion in each corner.
     P = RUINS_PIER
     pier_lift = round((RUINS_PIER_TOP - RUINS_GROUND) * OBLIQUE)
-    towers = [
-        (0, 6 * T - P, P, 6 * T), (0, 7 * T + pier_lift, P, 7 * T + pier_lift + P),
-        (c.w - P, 6 * T - P, c.w, 6 * T), (c.w - P, 7 * T + pier_lift, c.w, 7 * T + pier_lift + P),
-        (10 * T - P, pier_lift, 10 * T, pier_lift + P), (11 * T, pier_lift, 11 * T + P, pier_lift + P),
-        (10 * T - P, c.h - 2 - P, 10 * T, c.h - 2), (11 * T, c.h - 2 - P, 11 * T + P, c.h - 2),
-    ]
-    corners = [(0, pier_lift, P + 8, pier_lift + P + 8), (c.w - P - 8, pier_lift, c.w, pier_lift + P + 8),
-               (0, c.h - 10 - P, P + 8, c.h - 2), (c.w - P - 8, c.h - 10 - P, c.w, c.h - 2)]
     tower_stone = ruins_stone(c, 26, (0.42, 0.35, 0.25), (0.62, 0.53, 0.38), (0.8, 0.71, 0.54))
-    for x0, y0, x1, y1 in towers + corners:
+    for x0, y0, x1, y1 in ((0, pier_lift, P + 8, pier_lift + P + 8), (c.w - P - 8, pier_lift, c.w, pier_lift + P + 8),
+                           (0, c.h - 10 - P, P + 8, c.h - 2), (c.w - P - 8, c.h - 10 - P, c.w, c.h - 2)):
         c.block(c.rrect(x0, y0, x1, y1, 5, 2), RUINS_PIER_TOP, 5, tower_stone, 0.1)
-        cap = c.rrect(x0 + 10, y0 + 10, x1 - 10, y1 - 10, 4, 2)
-        c.block(cap, RUINS_PIER_TOP + 5, 3, (0.5, 0.42, 0.3), 0.1)
-    # Brazier bowls on the gate towers; the game lights them green (entrance) or red (exit).
-    for x0, y0, x1, y1 in towers:
-        bowl = c.disc((x0 + x1) / 2, (y0 + y1) / 2, 20, 2)
-        c.block(bowl, RUINS_PIER_TOP + 9, 3, (0.1, 0.09, 0.08), 0.3)
-
-    # Clear each gateway: packed road, a stone sill and shadow falling away at the map edge.
+        c.block(c.rrect(x0 + 10, y0 + 10, x1 - 10, y1 - 10, 4, 2), RUINS_PIER_TOP + 5, 3, (0.5, 0.42, 0.3), 0.1)
+    c.ground = RUINS_GROUND
     for code in RUINS_ENTRANCES + RUINS_EXITS:
-        wall, off = code >> 8, code & 255
-        dist = {1: c.w - c.x, 2: c.y, 3: c.x, 4: c.h - c.y}[wall]
-        along = np.abs((c.y if wall in (1, 3) else c.x) - (off + 0.5) * T)
-        mouth = smoothstep(T * 0.48, T * 0.45, along) * smoothstep(T * 0.72, T * 0.6, dist)
-        c.paint(mouth * smoothstep(T * 0.42, T * 0.02, dist) * 0.92, albedo=(0.04, 0.03, 0.03))
-        sill = smoothstep(T * 0.5, T * 0.47, along) * smoothstep(9, 6, np.abs(dist - T * 0.56))
-        c.paint(sill, albedo=(0.74, 0.66, 0.5), height=9)
-        gate_arrows(c, code, code in RUINS_ENTRANCES)
+        gate_piers(c, code, P, RUINS_PIER_TOP, RUINS_GROUND, tower_stone, (0.5, 0.42, 0.3))
+        gate_mouth(c, code)
     c.ground = RUINS_GROUND
     return c
 
@@ -628,48 +640,81 @@ def hazard(c, mask, scale=24):
     c.paint(mask, albedo=col, spec=0.3)
 
 
+FACTORY_ENTRANCES = (771, 774, 777)
+FACTORY_EXITS = (259, 262, 265)
+FACTORY_GROUND = 3
+FACTORY_WALL = 64
+FACTORY_PIER = 72
+FACTORY_PIER_TOP = 70
+
+
 def threeway_level():
     c = Canvas(20, 12)
-    deck_plates(c, 21)
-    # Floor grates in a few interior plates.
-    rng = np.random.default_rng(22)
-    for _ in range(14):
-        tx, ty = rng.integers(2, 18), rng.integers(1, 11)
-        if ty in (3, 6, 9) and rng.random() < 0.7:
-            continue
-        g = c.rect(tx * T + 18, ty * T + 18, (tx + 1) * T - 18, (ty + 1) * T - 18, 1.5)[0]
-        bars = (np.mod(c.x, 10) < 5).astype(np.float32)
-        c.paint(g, albedo=mix((0.04, 0.04, 0.05), (0.3, 0.31, 0.34), bars))
-        c.H -= g * (6 - bars * 3)
-    # Raised walkways (lanes) at the three gate rows, with guide lights.
+    # A shop floor: big steel plates with soft joints, worn and oil-stained in broad patches.
+    fx, fy = np.mod(c.x, T), np.mod(c.y, T)
+    seam = smoothstep(1, 4, np.minimum(np.minimum(fx, T - fx), np.minimum(fy, T - fy)))
+    tone = np.mod(np.sin(np.floor(c.x / T) * 12.9898 + np.floor(c.y / T) * 78.233) * 43758.5, 1).astype(np.float32)
+    macro = fbm(c.w, c.h, 240, 21, 4)
+    brushed = value_noise(c.w, c.h, 2, 22)
+    c.A[:] = palette_map(np.clip(macro * 1.25 - 0.12 + (tone - 0.5) * 0.1 + (brushed - 0.5) * 0.05, 0, 1),
+                         [(0, (0.29, 0.31, 0.35)), (0.5, (0.37, 0.39, 0.43)), (1, (0.45, 0.47, 0.51))])
+    c.A *= (0.78 + 0.22 * seam)[..., None]
+    c.H[:] = seam * 2.5 + macro * 1.5
+    c.S[:] = 0.3
+    oil = smoothstep(0.6, 0.85, fbm(c.w, c.h, 150, 23, 4))
+    c.paint(oil * 0.3, albedo=(0.12, 0.12, 0.13), spec=0.5)
+    # The three assembly lines: darker belts with rollers and dashed painted edges.
     for row in (3, 6, 9):
-        lane = c.rect(0, row * T + 8, c.w, (row + 1) * T - 8, 1.5)
-        c.H += lane[0] * 2
-        c.paint(lane[0] * 0.5, albedo=(0.28, 0.3, 0.34))
-        for tx in range(20):
-            for yy in (row * T + 14, (row + 1) * T - 14):
-                l = c.disc(tx * T + T / 2, yy, 3.5)[0]
-                c.paint(l, albedo=(0, 0, 0), emit=(0.3, 0.6, 1.0))
-    # Machinery walls on the north and south edges.
-    for y0, y1 in ((0, T * 0.3 + north_lift(40)), (c.h - T * 0.3, c.h)):
-        wall = c.rect(-10, y0, c.w + 10, y1, 2)
-        c.block(wall, 34, 6, (0.22, 0.23, 0.26), 0.5)
-        for tx in range(20):
-            box_ = c.rrect(tx * T + 16, y0 + 8, (tx + 1) * T - 16, y1 - 8, 6)
-            c.block(box_, 40, 4, (0.3, 0.32, 0.36), 0.6)
-            lamp = c.disc(tx * T + T / 2, (y0 + y1) / 2, 5)[0]
-            c.paint(lamp, albedo=(0, 0, 0), emit=((0.3, 1.0, 0.4) if tx % 3 else (1.0, 0.3, 0.2)))
-    hz = np.maximum(c.rect(0, T * 0.3 + north_lift(40), c.w, T * 0.42 + north_lift(40), 1)[0], c.rect(0, c.h - T * 0.42, c.w, c.h - T * 0.3, 1)[0])
-    hazard(c, hz)
-    # Gate frames on the side walls.
-    for code in (771, 774, 777, 259, 262, 265):
-        side, row = code >> 8, code & 255
-        x0 = 0 if side == 3 else c.w - 22
-        for yy in (row * T + 4, (row + 1) * T - 18):
-            post = c.rect(x0, yy, x0 + 22, yy + 14, 1.5)
-            c.block(post, 30, 3, (0.2, 0.21, 0.24), 0.5)
-        hazard(c, c.rect(x0, row * T + 18, x0 + 22, (row + 1) * T - 18, 1)[0])
-    c.ground = 3  # height of the playing surface
+        cy = (row + 0.5) * T
+        belt = smoothstep(T * 0.44, T * 0.42, np.abs(c.y - cy))
+        rollers = 0.84 + 0.16 * smoothstep(1, 3, np.abs(np.mod(c.x, 28) - 14))
+        c.paint(belt, albedo=np.asarray((0.24, 0.25, 0.28))[None, None] * rollers[..., None], spec=0.25)
+        c.paint(smoothstep(4, 2.5, np.abs(np.abs(c.y - cy) - T * 0.47)) * (np.mod(c.x, T * 0.5) < T * 0.3),
+                albedo=(0.82, 0.62, 0.12), spec=0.2)
+    # Drains laid out evenly between the lines.
+    for ty in (2, 5, 8):
+        for tx in (4, 10, 16):
+            m, inside = c.rrect(tx * T - 42, ty * T - 18, tx * T + 42, ty * T + 18, 6)
+            c.paint(m, albedo=(0.24, 0.25, 0.27), height=3, spec=0.4)
+            c.paint((np.mod(c.x, 12) < 5) * (inside > 5), albedo=(0.03, 0.03, 0.04), height=1)
+    # A bulkhead on all four sides like the Basic map's, with a lit panel on every tile.
+    band = round(T * 0.36)
+    lift = round((FACTORY_WALL - FACTORY_GROUND) * OBLIQUE)
+    north_y = band + lift
+    south_y = c.h - band
+    gap = np.zeros((c.h, c.w), bool)
+    for row in (3, 6, 9):
+        gap |= (c.y > row * T + 1) & (c.y < (row + 1) * T - 1 + lift)
+    wall_col = (0.34, 0.36, 0.41)
+    c.block(c.rect(-10, -10, c.w + 10, north_y, 2), FACTORY_WALL, 6, wall_col, 0.6)
+    c.block(c.rect(-10, south_y, c.w + 10, c.h + 10, 2), FACTORY_WALL, 6, wall_col, 0.6)
+    for x0, x1 in ((-10, band), (c.w - band, c.w + 10)):
+        m, inside = c.rect(x0, north_y - 4, x1, south_y + 4, 2)
+        c.block((m * ~gap, inside), FACTORY_WALL, 6, wall_col, 0.6)
+    panel = (0.48, 0.5, 0.55)
+    blue = (0.25, 0.55, 1.0)
+    for tx in range(20):
+        for y0, y1 in ((lift + 8, north_y - 8), (south_y + 8, c.h - 6)):
+            c.block(c.rrect(tx * T + 10, y0, (tx + 1) * T - 10, y1, 6), FACTORY_WALL + 6, 4, panel, 0.7)
+            lamp = c.rrect(tx * T + T / 2 - 28, (y0 + y1) / 2 - 3, tx * T + T / 2 + 28, (y0 + y1) / 2 + 3, 3)[0]
+            c.paint(lamp, albedo=(0, 0, 0), emit=blue)
+    for ty in range(1, 11):
+        if ty in (3, 6, 9):
+            continue
+        for x0, x1 in ((8, band - 6), (c.w - band + 6, c.w - 8)):
+            y0 = ty * T + 12 + (ty in (4, 7, 10)) * lift
+            m, inside = c.rrect(x0, y0, x1, (ty + 1) * T - 12, 5)
+            c.block((m * ~gap, inside), FACTORY_WALL + 6, 4, panel, 0.7)
+            c.paint(c.rrect((x0 + x1) / 2 - 3, y0 + 26, (x0 + x1) / 2 + 3, (ty + 1) * T - 38, 3)[0] * ~gap, albedo=(0, 0, 0), emit=blue)
+    # Hazard paint along the foot of the north and south walls.
+    hazard(c, np.maximum(c.rect(band, north_y, c.w - band, north_y + 10, 1)[0],
+                         c.rect(band, south_y - lift - 12, c.w - band, south_y - lift - 2, 1)[0]), 20)
+    c.ground = FACTORY_GROUND
+    # Gates: a tower either side, and a dark tunnel beyond a hazard-striped sill.
+    tower = (0.4, 0.42, 0.47)
+    for code in FACTORY_ENTRANCES + FACTORY_EXITS:
+        gate_piers(c, code, FACTORY_PIER, FACTORY_PIER_TOP, FACTORY_GROUND, tower, (0.28, 0.3, 0.34), (0.06, 0.06, 0.07))
+        gate_mouth(c, code, depth=band + 10, sill=(0.82, 0.62, 0.12))
     return c
 
 
@@ -678,19 +723,8 @@ def threeway_level():
 COURT_NORTH = T * 0.36 + round(48 * OBLIQUE)
 COURT_ENTRANCES = (774, 516, 1034, 527)
 COURT_EXITS = (262, 1028, 522, 1039)
-ARCH_TOP = 72            # height of the lintels (lifts their tops about 19 world px)
-ARCH_LIFT = round((ARCH_TOP - 3) * OBLIQUE / PPU)
-# Lintels over the gates, drawn above units: (sprite id, column, is north, emissive gem). The sprite
-# box is (70 * col - 6, top, 82, ARCH_H) in world px; maps.ts places the overlays at the same spot.
-ARCH_NORTH_Y, ARCH_SOUTH_Y, ARCH_H = 0, 70 * 11 - 20, 66
-COURTYARD_ARCHES = (
-    ('courtyard_nw_overlay', 4, True, ENTRANCE_GLOW),
-    ('courtyard_n_overlay', 10, True, EXIT_GLOW),
-    ('courtyard_ne_overlay', 15, True, ENTRANCE_GLOW),
-    ('courtyard_sw_overlay', 4, False, EXIT_GLOW),
-    ('courtyard_s_overlay', 10, False, ENTRANCE_GLOW),
-    ('courtyard_se_overlay', 15, False, EXIT_GLOW),
-)
+COURT_PIER = 72
+COURT_PIER_TOP = 60
 
 
 def courtyard_level():
@@ -766,16 +800,7 @@ def courtyard_level():
         for yy in (COURT_NORTH * 0.56, c.h - T * 0.18):
             c.block(c.disc(tx * T + T / 2, yy, 15), 48, 4, (0.7, 0.73, 0.78), 0.5)
             c.paint(c.disc(tx * T + T / 2, yy, 5)[0], albedo=(0, 0, 0), emit=(1.0, 0.85, 0.5))
-    # Gatehouse piers beside the gates.
-    pier_lift = round((54 - 3) * OBLIQUE)
-    for col in gate_cols:
-        for x0, x1 in ((col * T - 24, col * T + 4), ((col + 1) * T - 4, (col + 1) * T + 24)):
-            c.block(c.rrect(x0, pier_lift, x1, COURT_NORTH + 8, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
-            c.block(c.rrect(x0, south_y - 8, x1, c.h - 2, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
-    for x0, x1 in ((0, T * 0.42), (c.w - T * 0.42, c.w)):
-        c.block(c.rrect(x0, 6 * T - 30, x1, 6 * T, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
-        c.block(c.rrect(x0, 7 * T + pier_lift, x1, 7 * T + pier_lift + 30, 4), 54, 4, (0.64, 0.67, 0.73), 0.4)
-    # Gate floors with arrows showing which way robots come and go.
+    # Gate floors, each open to the map edge with a lamp tower either side.
     for col in gate_cols:
         for y0, y1 in ((-2, COURT_NORTH + 2), (south_y - 2, c.h + 2)):
             g = c.rect(col * T + 3, y0, (col + 1) * T - 3, y1, 2)[0]
@@ -785,22 +810,11 @@ def courtyard_level():
         g = c.rect(x0, 6 * T + 3, x1, 7 * T - 3, 2)[0]
         c.H = c.H * (1 - g) + 3 * g
         c.paint(g, albedo=(0.3, 0.33, 0.39))
+    c.ground = 3
     for code in COURT_ENTRANCES + COURT_EXITS:
-        gate_arrows(c, code, code in COURT_ENTRANCES, reach=1.42 if code >> 8 == 4 else 0.72, opacity=0.65)
-    # Lintels across the column gates (also exported as overlay sprites, so robots pass beneath).
-    arch = np.zeros((c.h, c.w), np.float32)
-    lift_px = ARCH_LIFT * PPU
-    for _, col, north, gem in COURTYARD_ARCHES:
-        x0, x1 = col * T - 10, (col + 1) * T + 10
-        y0 = lift_px if north else 70 * PPU * 11 + 8
-        y1 = y0 + 46
-        span = c.rrect(x0, y0, x1, y1, 6)
-        c.block(span, ARCH_TOP, 5, (0.72, 0.75, 0.8), 0.5)
-        band = c.rect(x0 + 10, y0 + 12, x1 - 10, y1 - 12, 1.5)[0]
-        c.paint(band, albedo=(0.5, 0.53, 0.6))
-        c.paint(c.disc((x0 + x1) / 2, (y0 + y1) / 2, 8)[0], albedo=(0, 0, 0), emit=gem)
-        arch = np.maximum(arch, span[0])
-    c.overlay_mask = arch
+        gate_piers(c, code, COURT_PIER, COURT_PIER_TOP, 3, (0.64, 0.67, 0.73), (0.46, 0.49, 0.56), (0.08, 0.09, 0.11))
+        depth = COURT_NORTH if code >> 8 == 2 else T * 0.42
+        gate_mouth(c, code, depth=depth, sill=(0.78, 0.8, 0.84))
     c.ground = 3  # height of the playing surface
     return c
 
@@ -1039,7 +1053,6 @@ def skytower_level():
         for py in (row * T + 2, (row + 1) * T - 2 + pil_lift):
             c.block(c.rrect(px - 17, py - 17, px + 17, py + 17, 4), 100, 4, (0.56, 0.57, 0.57), 0.3)
             c.paint(c.disc(px, py, 8)[0], albedo=(0.04, 0.04, 0.05))
-        gate_arrows(c, code, code in SKY_ENTRANCES, reach=0.72, opacity=0.75)
     # Battlements: one clean block per shape, with merlons around a recessed walkway.
     wall = palette_map(stone, [(0, (0.5, 0.51, 0.5)), (1, (0.76, 0.77, 0.74))])
     for shape in SKY_SHAPES:
@@ -1066,7 +1079,9 @@ def skytower_level():
     pit = c.disc(cx, cy, SKY_PIT_R)
     c.H = np.where(pit[0] > 0.5, SKY_GROUND, c.H)
     c.paint(pit[0], albedo=(0.1, 0.03, 0.0), emit=lava_colors(lava_field(c.x, c.y, 0.0)))
-    c.solid_shadow = True
+    c.deck_mask = deck[0]
+    c.bridge_mask = bridges
+    c.deck_bottom = y1
     c.ground = SKY_GROUND
     return c
 
@@ -1159,7 +1174,7 @@ def fountain_water(w, h, t):
 
     def stream(n, cycles, r0, r1, z0, peak, z1, spokes=0):
         """`n` drops on parabolas from radius r0, height z0 up to `peak` and down to (r1, z1)."""
-        phase = rng.random(n)
+        phase = np.arange(n) / n
         ang = rng.uniform(0, math.tau, n) if spokes == 0 else rng.integers(0, spokes, n) * math.tau / spokes
         ang = ang + rng.normal(0, 0.03, n)
         u = np.mod(cycles * t + phase, 1)
@@ -1250,23 +1265,7 @@ class _Draw:
             return cloud_tile(w, h, *self.args)
         if self.kind == 'dust':
             return dust_puff(w, h)
-        x, y, ow, oh = self.args
-        rgb, mask = courtyard_overlay_source()
-        x0, y0 = x * PPU, y * PPU
-        crop = rgb[y0:y0 + oh * PPU, x0:x0 + ow * PPU]
-        a = (mask[y0:y0 + oh * PPU, x0:x0 + ow * PPU] * 255).round().astype(np.uint8)
-        return np.dstack([crop, a])
-
-
-_COURT = None
-
-
-def courtyard_overlay_source():
-    global _COURT
-    if _COURT is None:
-        c = courtyard_level()
-        _COURT = (c.render(), c.remap(c.overlay_mask))
-    return _COURT
+        raise ValueError(self.kind)
 
 
 _WATER = None
@@ -1320,9 +1319,6 @@ def sprite_sheets():
     sx0, sy0, sx1, sy1 = WATER_SIDE
     s['water_side'] = dict(size=(sx1 - sx0, sy1 - sy0), frames=[
         dict(draw=_Draw('water', WATER_SIDE, f / WATER_FRAMES)) for f in range(WATER_FRAMES)])
-    for sid, col, north, _ in COURTYARD_ARCHES:
-        x, y = 70 * col - 6, ARCH_NORTH_Y if north else ARCH_SOUTH_Y
-        s[sid] = dict(size=(82, ARCH_H), frames=[dict(draw=_Draw('court', x, y, 82, ARCH_H))])
     s['lava_pit'] = dict(size=LAVA_BOX[2:], frames=[dict(draw=_Draw('lava', f / LAVA_FRAMES)) for f in range(LAVA_FRAMES)])
     s['fountain'] = dict(size=(FOUNTAIN_CAM['fw'], FOUNTAIN_CAM['fh']), frames=[
         dict(scene=fountain_scene, cam=dict(FOUNTAIN_CAM), ground_shadow=0.3, shadow_radius=85)])
@@ -1340,12 +1336,16 @@ def level_image(c):
     if not hasattr(c, 'open_mask'):
         return rgb
     a = 1 - c.remap(c.open_mask)
-    if getattr(c, 'solid_shadow', False):
-        # The deck's soft shadow on the clouds, and bridges dissolving into them at the map edge.
+    if hasattr(c, 'deck_mask'):
+        # Bridges are thin slabs with only a sliver of front face, dissolving into the clouds at
+        # the map edge. Only the deck casts a shadow, straight down onto the clouds below it.
+        deck = c.remap(c.deck_mask)
+        slab = np.maximum(c.bridge_mask, np.roll(c.bridge_mask, 6, 0))
         fade = smoothstep(0, 50, np.minimum(c.x, c.w - c.x))
-        cast = blur(np.roll(np.roll(a, 34, 0), -22, 1), 18) * 0.42
+        a = np.maximum(deck, slab * fade)
+        cast = blur(np.roll(deck, 34, 0), 18) * 0.42 * smoothstep(c.deck_bottom, c.deck_bottom + 40, c.y)
         rgb = (rgb * a[..., None]).round().astype(np.uint8)
-        a = np.maximum(a * fade, cast * (1 - a))
+        a = np.maximum(a, cast * (1 - a))
     return np.dstack([rgb, (a * 255).round().clip(0, 255).astype(np.uint8)])
 
 

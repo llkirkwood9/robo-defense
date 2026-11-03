@@ -13,7 +13,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import type { MapType } from '@/engine/maps';
 import { createMapLayout, MAP_COUNT, MAP_IMAGES, MAP_NAMES, MapType as Maps } from '@/engine/maps';
 import { useStore } from '@/lib/store';
-import { LEVEL_SOURCES } from '@/render/assets';
+import { LEVEL_PREVIEWS } from '@/render/assets';
 import { haptics } from '@/services/haptics';
 import { maxDifficulty, profileStore, towerMixUnlocked, updateNewGame } from '@/services/profile';
 import { GlassSurface } from '@/ui/Glass';
@@ -26,7 +26,7 @@ const MAP_BLURBS: Record<MapType, string> = {
   [Maps.Basic]: 'One road, open field. The classic.',
   [Maps.Ruins]: 'Two crossing paths through old ruins.',
   [Maps.Factory]: 'Three parallel assembly lines.',
-  [Maps.Courtyard]: 'Four gates and a fortified centre.',
+  [Maps.Courtyard]: 'Four paths around a garden fountain.',
   [Maps.VrTraining]: 'Procedural maps generated from a code.',
   [Maps.Roadway]: 'A narrow highway in the sky.',
   [Maps.SkyTower]: 'Two paths weaving around platforms.',
@@ -71,14 +71,10 @@ export default function NewGameScreen() {
   };
 
   return (
-    <Screen backdrop={MAP_IMAGES[settings.mapType]} contentStyle={styles.content}>
+    <Screen backdrop={MAP_IMAGES[settings.mapType]} scroll={false} contentStyle={styles.content}>
       <View style={styles.mapsColumn}>
         <Text variant="heading">Map</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.maps}
-        >
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.maps}>
           {Array.from({ length: MAP_COUNT }, (_, i) => {
             const selected = i === settings.mapType;
             const layout = layouts[i];
@@ -100,7 +96,7 @@ export default function NewGameScreen() {
                   style={[styles.mapCard, selected && styles.mapCardSelected]}
                 >
                   <Image
-                    source={LEVEL_SOURCES[MAP_IMAGES[i as MapType]]}
+                    source={LEVEL_PREVIEWS[MAP_IMAGES[i as MapType]]}
                     style={styles.mapImage}
                     contentFit="cover"
                   />
@@ -124,83 +120,88 @@ export default function NewGameScreen() {
         </ScrollView>
       </View>
 
-      <GlassSurface radius={radii.lg} style={styles.panel}>
-        <View style={styles.field}>
-          <Text variant="heading">Mode</Text>
-          <SegmentedControl
-            values={['Classic', 'Survival']}
-            selectedIndex={settings.survival ? 1 : 0}
-            appearance="dark"
-            onChange={(e) => updateNewGame({ survival: e.nativeEvent.selectedSegmentIndex === 1 })}
-          />
-          <Text variant="caption">
-            {settings.survival
-              ? 'Difficulty climbs every wave. How long can you last?'
-              : '100 waves at a fixed difficulty.'}
-          </Text>
-        </View>
-
-        {!settings.survival && (
+      {/* Scrolls by itself on short screens, so Start Game stays put while browsing the maps. */}
+      <ScrollView style={styles.panelScroll} showsVerticalScrollIndicator={false}>
+        <GlassSurface radius={radii.lg} style={styles.panel}>
           <View style={styles.field}>
-            <View style={styles.rowBetween}>
-              <Text variant="heading">Difficulty</Text>
-              <Text variant="title" color={colors.accent}>
-                {difficulty}
-              </Text>
-            </View>
-            <View style={styles.row}>
-              <GlassButton
-                icon="minus"
-                size="sm"
-                accessibilityLabel="Lower difficulty"
-                disabled={difficulty <= 0}
-                onPress={() => setDifficulty(difficulty - 1)}
-              />
-              <Slider
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={max}
-                step={1}
-                value={difficulty}
-                onValueChange={setDifficulty}
-                minimumTrackTintColor={colors.accent}
-                maximumTrackTintColor="rgba(255,255,255,0.2)"
-              />
-              <GlassButton
-                icon="plus"
-                size="sm"
-                accessibilityLabel="Raise difficulty"
-                disabled={difficulty >= max}
-                onPress={() => setDifficulty(difficulty + 1)}
-              />
-            </View>
-            <Text variant="caption">
-              Win at difficulty {max} to raise the limit to {max + 10}.
-            </Text>
-            {difficulty > maxLevelWon + 3 && (
-              <Text variant="caption" color={colors.gold}>
-                A big step up from your best win. Robots get tough fast without upgrades.
-              </Text>
-            )}
-          </View>
-        )}
-
-        {mixUnlocked && (
-          <View style={styles.rowBetween}>
-            <View style={styles.flex}>
-              <Text variant="heading">Tower Mix</Text>
-              <Text variant="caption">Rebalance towers with a code.</Text>
-            </View>
-            <Switch
-              value={settings.towerMixEnabled}
-              onValueChange={(v) => updateNewGame({ towerMixEnabled: v })}
-              trackColor={{ true: colors.accentDeep }}
+            <Text variant="heading">Mode</Text>
+            <SegmentedControl
+              values={['Classic', 'Survival']}
+              selectedIndex={settings.survival ? 1 : 0}
+              appearance="dark"
+              onChange={(e) =>
+                updateNewGame({ survival: e.nativeEvent.selectedSegmentIndex === 1 })
+              }
             />
+            <Text variant="caption">
+              {settings.survival
+                ? 'Difficulty climbs every wave. How long can you last?'
+                : '100 waves at a fixed difficulty.'}
+            </Text>
           </View>
-        )}
 
-        <GlassButton label="Start Game" icon="play" tone="primary" size="lg" onPress={start} />
-      </GlassSurface>
+          {!settings.survival && (
+            <View style={styles.field}>
+              <View style={styles.rowBetween}>
+                <Text variant="heading">Difficulty</Text>
+                <Text variant="title" color={colors.accent}>
+                  {difficulty}
+                </Text>
+              </View>
+              <View style={styles.row}>
+                <GlassButton
+                  icon="minus"
+                  size="sm"
+                  accessibilityLabel="Lower difficulty"
+                  disabled={difficulty <= 0}
+                  onPress={() => setDifficulty(difficulty - 1)}
+                />
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={max}
+                  step={1}
+                  value={difficulty}
+                  onValueChange={setDifficulty}
+                  minimumTrackTintColor={colors.accent}
+                  maximumTrackTintColor="rgba(255,255,255,0.2)"
+                />
+                <GlassButton
+                  icon="plus"
+                  size="sm"
+                  accessibilityLabel="Raise difficulty"
+                  disabled={difficulty >= max}
+                  onPress={() => setDifficulty(difficulty + 1)}
+                />
+              </View>
+              <Text variant="caption">
+                Win at difficulty {max} to raise the limit to {max + 10}.
+              </Text>
+              {difficulty > maxLevelWon + 3 && (
+                <Text variant="caption" color={colors.gold}>
+                  A big step up from your best win. Robots get tough fast without upgrades.
+                </Text>
+              )}
+            </View>
+          )}
+
+          {mixUnlocked && (
+            <View style={styles.rowBetween}>
+              <View style={styles.flex}>
+                <Text variant="heading">Tower Mix</Text>
+                <Text variant="caption">Rebalance towers with a code.</Text>
+              </View>
+              <Switch
+                value={settings.towerMixEnabled}
+                onValueChange={(v) => updateNewGame({ towerMixEnabled: v })}
+                trackColor={{ true: colors.accentDeep }}
+              />
+            </View>
+          )}
+
+          <GlassButton label="Start Game" icon="play" tone="primary" size="lg" onPress={start} />
+        </GlassSurface>
+      </ScrollView>
     </Screen>
   );
 }
@@ -208,7 +209,6 @@ export default function NewGameScreen() {
 const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: spacing.xl,
   },
   mapsColumn: {
@@ -216,28 +216,35 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   maps: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
     paddingVertical: spacing.xs,
-    paddingRight: spacing.lg,
   },
+  // Every card is the same size whatever its text, with room for the selected card's border.
   mapCard: {
     width: 200,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   mapCardSelected: {
-    borderWidth: 2,
     borderColor: colors.accent,
   },
   mapImage: {
     width: '100%',
-    height: 110,
+    aspectRatio: 5 / 3,
   },
   mapInfo: {
+    height: 108,
     padding: spacing.md,
     gap: 2,
   },
-  panel: {
+  panelScroll: {
     width: 330,
+    flexGrow: 0,
+  },
+  panel: {
     padding: spacing.lg,
     gap: spacing.lg,
   },

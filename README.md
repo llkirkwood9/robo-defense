@@ -107,8 +107,8 @@ These numbers were tuned against it. They intentionally differ from the original
   starts the next one and pays twice the clear bonus on the spot.
 - **Upgrade all.** The upgrade panel can upgrade every tower of the same type when money covers
   all of them, which also re-arms all mines and teleporters at once.
-- **Livelier maps.** The Ruins, Sky Tower, Courtyard and Roadway were repainted. Gates are marked
-  with green (entrance) and red (exit) lamps and arrows, dust blows through the Ruins, clouds drift
+- **Livelier maps.** The Ruins, Factory, Sky Tower, Courtyard and Roadway were repainted. Gates are marked
+  with green (entrance) and red (exit) lamps, dust blows through the Ruins, clouds drift
   around the Sky Tower over its churning lava, the Courtyard has a fountain (which blocks towers and
   robots), and the Roadway's coloured lamps blink over open sky.
 - **Scroll to zoom.** On the web, the mouse wheel or a trackpad pinch zooms around the cursor.
