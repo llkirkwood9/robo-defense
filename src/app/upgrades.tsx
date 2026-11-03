@@ -61,13 +61,29 @@ function RewardCard({ info }: { info: RewardInfo }) {
         {owned ? (
           <Icon name="check" size={22} color={colors.success} />
         ) : (
-          <GlassButton
-            label={info.isUnlock ? 'Unlock' : 'Upgrade'}
-            size="sm"
-            tone="primary"
-            disabled={!info.affordable}
-            onPress={buy}
-          />
+          <View style={styles.action}>
+            <GlassButton
+              label={info.isUnlock ? 'Unlock' : 'Upgrade'}
+              size="sm"
+              tone="primary"
+              disabled={!info.affordable}
+              onPress={buy}
+            />
+            <View style={styles.cost}>
+              <Icon
+                name="rewards"
+                size={14}
+                color={info.affordable ? colors.gold : colors.textFaint}
+              />
+              <Text
+                variant="stat"
+                style={styles.costText}
+                color={info.affordable ? colors.gold : colors.textFaint}
+              >
+                {info.cost.toLocaleString()}
+              </Text>
+            </View>
+          </View>
         )}
       </View>
       {info.isUnlock ? (
@@ -82,18 +98,6 @@ function RewardCard({ info }: { info: RewardInfo }) {
             text={info.currentDescription}
           />
           <LevelRow label="NEXT" level={`Level ${info.level + 1}`} text={info.description} />
-        </View>
-      )}
-      {!owned && (
-        <View style={styles.cost}>
-          <Icon name="rewards" size={14} color={info.affordable ? colors.gold : colors.textFaint} />
-          <Text
-            variant="stat"
-            style={styles.costText}
-            color={info.affordable ? colors.gold : colors.textFaint}
-          >
-            {info.cost.toLocaleString()}
-          </Text>
         </View>
       )}
     </GlassSurface>
@@ -151,8 +155,12 @@ const styles = StyleSheet.create({
   },
   cardTop: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.md,
+  },
+  action: {
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   levels: {
     gap: spacing.sm,

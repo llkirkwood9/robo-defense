@@ -78,7 +78,7 @@ def _job(i):
     if i < len(PORTRAITS):
         model, fw, oy, k = PORTRAITS[i]
         return i, portrait(model, fw, oy, k, ss=2)
-    return i, icon(1024, i == len(PORTRAITS), 0.78 if i == len(PORTRAITS) else 0.56)
+    return i, icon(1024, i == len(PORTRAITS), 0.98 if i == len(PORTRAITS) else 0.56)
 
 
 def main(out_root=ROOT):
